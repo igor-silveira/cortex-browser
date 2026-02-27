@@ -1,6 +1,7 @@
 pub mod browser;
 pub mod diff;
 pub mod dom;
+pub mod extract;
 pub mod hints;
 pub mod mcp;
 pub mod mutation;
