@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::dom::RefIndex;
-use crate::{browser, diff, extract, hints, mutation, pipeline, serialize};
+use crate::{browser, diff, extract, hints, mutation, pipeline, recording, serialize};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct NavigateParams {
@@ -124,6 +124,40 @@ pub struct ExtractParams {
     pub selector: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct StartRecordingParams {
+    /// A short name for this recording (e.g., "login-flow")
+    pub name: String,
+    /// Optional description of what this recording does
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ReplayRecordingParams {
+    /// The name of the recording to replay
+    pub name: String,
+    /// Optional domain to narrow the search (e.g., "github-com")
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ListRecordingsParams {
+    /// Optional domain to filter by (e.g., "github-com")
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DeleteRecordingParams {
+    /// The name of the recording to delete
+    pub name: String,
+    /// Optional domain to narrow the search
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
 struct TabState {
     page: chromiumoxide::Page,
     ref_index: RefIndex,
@@ -140,6 +174,8 @@ struct BrowserState {
     tabs: HashMap<u32, TabState>,
     active_tab: u32,
     next_tab_id: u32,
+    active_recording: Option<recording::Recording>,
+    replaying: bool,
 }
 
 impl BrowserState {
@@ -149,6 +185,8 @@ impl BrowserState {
             tabs: HashMap::new(),
             active_tab: 0,
             next_tab_id: 1,
+            active_recording: None,
+            replaying: false,
         }
     }
 
@@ -164,12 +202,23 @@ impl BrowserState {
             .get_mut(&id)
             .with_context(|| "No active tab. Use navigate or open_tab first.")
     }
+
+    /// Push an action to the active recording (if any and not replaying).
+    fn record(&mut self, action: recording::RecordedAction) {
+        if self.replaying {
+            return;
+        }
+        if let Some(ref mut rec) = self.active_recording {
+            rec.actions.push(action);
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct CortexBrowserServer {
     tool_router: ToolRouter<Self>,
     state: Arc<RwLock<BrowserState>>,
+    store: Arc<recording::RecordingStore>,
     launch_browser: bool,
     port: u16,
 }
@@ -180,6 +229,7 @@ impl CortexBrowserServer {
         Self {
             tool_router: Self::tool_router(),
             state: Arc::new(RwLock::new(BrowserState::new())),
+            store: Arc::new(recording::RecordingStore::new()),
             launch_browser,
             port,
         }
@@ -366,6 +416,58 @@ impl CortexBrowserServer {
             Err(e) => format!("ERROR: Extract failed: {e}"),
         }
     }
+
+    #[tool(description = "Start recording browser actions for the current domain. Actions (navigate, click, type, select) will be captured until stop_recording is called. Only one recording can be active at a time.")]
+    async fn start_recording(
+        &self,
+        Parameters(params): Parameters<StartRecordingParams>,
+    ) -> String {
+        match self.do_start_recording(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Start recording failed: {e}"),
+        }
+    }
+
+    #[tool(description = "Stop the active recording, save it to disk, and return a summary. The recording can later be replayed with replay_recording.")]
+    async fn stop_recording(&self) -> String {
+        match self.do_stop_recording().await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Stop recording failed: {e}"),
+        }
+    }
+
+    #[tool(description = "Replay a saved recording deterministically. Each action is re-executed using stored element locators - no LLM needed. Aborts on first element not found.")]
+    async fn replay_recording(
+        &self,
+        Parameters(params): Parameters<ReplayRecordingParams>,
+    ) -> String {
+        match self.do_replay_recording(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Replay failed: {e}"),
+        }
+    }
+
+    #[tool(description = "List saved recordings, optionally filtered by domain.")]
+    async fn list_recordings(
+        &self,
+        Parameters(params): Parameters<ListRecordingsParams>,
+    ) -> String {
+        match self.do_list_recordings(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: List recordings failed: {e}"),
+        }
+    }
+
+    #[tool(description = "Delete a saved recording by name.")]
+    async fn delete_recording(
+        &self,
+        Parameters(params): Parameters<DeleteRecordingParams>,
+    ) -> String {
+        match self.do_delete_recording(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Delete recording failed: {e}"),
+        }
+    }
 }
 
 #[tool_handler]
@@ -384,7 +486,9 @@ impl ServerHandler for CortexBrowserServer {
                  Use 'scroll_down', 'scroll_up', 'scroll_to_ref' to navigate within long pages. \
                  Elements marked [offscreen] are outside the current viewport. \
                  Use 'page_diff' to see what changed since the last snapshot, or pass return_diff:true to click/type_text/select_option. \
-                 Use 'extract' with a JSON Schema to pull structured data (tables, lists, objects) from the page as JSON."
+                 Use 'extract' with a JSON Schema to pull structured data (tables, lists, objects) from the page as JSON. \
+                 Use 'start_recording' / 'stop_recording' to capture action sequences, then 'replay_recording' to replay them deterministically without LLM decisions. \
+                 Use 'list_recordings' and 'delete_recording' to manage saved recordings."
                     .into(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
@@ -529,6 +633,10 @@ impl CortexBrowserServer {
             }
         }
 
+        state.record(recording::RecordedAction::Navigate {
+            url: url.to_string(),
+        });
+
         // page is moved into state below - no more CDP calls
         if state.tabs.is_empty() {
             let tab_id = state.next_tab_id;
@@ -647,83 +755,70 @@ impl CortexBrowserServer {
 
     async fn do_click(&self, ref_id: u32, return_diff: bool) -> anyhow::Result<String> {
         info!(ref_id = ref_id, return_diff = return_diff, "click");
-        let js = {
+        let (js, captured_locator) = {
             let state = self.state.read().await;
             let tab = state.active_tab()?;
             let locator = tab
                 .ref_index
                 .get(&ref_id)
                 .with_context(|| format!("Unknown ref @e{ref_id}"))?;
-            format!(
-                "(function() {{ \
-                    var el = {find}; \
-                    if (!el) return 'NOT_FOUND'; \
-                    var a = el.closest('a[href]') || (el.tagName === 'A' && el.href ? el : null); \
-                    if (a && a.target === '_blank') {{ \
-                        a.removeAttribute('target'); \
-                    }} \
-                    el.click(); \
-                    return 'OK'; \
-                }})()",
-                find = locator.to_js_expression()
-            )
+            (locator.click_js(), locator.clone())
         };
-        self.execute_and_snapshot(&js, ref_id, return_diff).await
+        let result = self.execute_and_snapshot(&js, ref_id, return_diff).await?;
+        {
+            let mut state = self.state.write().await;
+            state.record(recording::RecordedAction::Click {
+                locator: captured_locator,
+                ref_id,
+            });
+        }
+        Ok(result)
     }
 
     async fn do_type_text(&self, ref_id: u32, text: &str, return_diff: bool) -> anyhow::Result<String> {
         info!(ref_id = ref_id, text = %text, return_diff = return_diff, "type_text");
-        let escaped = text
-            .replace('\\', "\\\\")
-            .replace('\'', "\\'")
-            .replace('\n', "\\n");
-        let js = {
+        let (js, captured_locator) = {
             let state = self.state.read().await;
             let tab = state.active_tab()?;
             let locator = tab
                 .ref_index
                 .get(&ref_id)
                 .with_context(|| format!("Unknown ref @e{ref_id}"))?;
-            format!(
-                "(function() {{ \
-                    var el = {find}; \
-                    if (!el) return 'NOT_FOUND'; \
-                    el.focus(); \
-                    el.value = '{text}'; \
-                    el.dispatchEvent(new Event('input', {{bubbles: true}})); \
-                    el.dispatchEvent(new Event('change', {{bubbles: true}})); \
-                    return 'OK'; \
-                }})()",
-                find = locator.to_js_expression(),
-                text = escaped,
-            )
+            (locator.type_js(text), locator.clone())
         };
-        self.execute_and_snapshot(&js, ref_id, return_diff).await
+        let result = self.execute_and_snapshot(&js, ref_id, return_diff).await?;
+        {
+            let mut state = self.state.write().await;
+            state.record(recording::RecordedAction::TypeText {
+                locator: captured_locator,
+                text: text.to_string(),
+                ref_id,
+            });
+        }
+        Ok(result)
     }
 
     async fn do_select(&self, ref_id: u32, value: &str, return_diff: bool) -> anyhow::Result<String> {
         info!(ref_id = ref_id, value = %value, return_diff = return_diff, "select_option");
-        let escaped = value.replace('\\', "\\\\").replace('\'', "\\'");
-        let js = {
+        let (js, captured_locator) = {
             let state = self.state.read().await;
             let tab = state.active_tab()?;
             let locator = tab
                 .ref_index
                 .get(&ref_id)
                 .with_context(|| format!("Unknown ref @e{ref_id}"))?;
-            format!(
-                "(function() {{ \
-                    var el = {find}; \
-                    if (!el) return 'NOT_FOUND'; \
-                    el.value = '{value}'; \
-                    el.dispatchEvent(new Event('change', {{bubbles: true}})); \
-                    return 'OK'; \
-                }})()",
-                find = locator.to_js_expression(),
-                value = escaped,
-            )
+            (locator.select_js(value), locator.clone())
         };
-        self.execute_and_snapshot(&js, ref_id, return_diff).await
+        let result = self.execute_and_snapshot(&js, ref_id, return_diff).await?;
+        {
+            let mut state = self.state.write().await;
+            state.record(recording::RecordedAction::SelectOption {
+                locator: captured_locator,
+                value: value.to_string(),
+                ref_id,
+            });
+        }
+        Ok(result)
     }
 
     async fn execute_and_snapshot(
@@ -1042,6 +1137,178 @@ impl CortexBrowserServer {
         );
 
         Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|_| "null".into()))
+    }
+
+    async fn do_start_recording(
+        &self,
+        params: StartRecordingParams,
+    ) -> anyhow::Result<String> {
+        let mut state = self.state.write().await;
+        if state.active_recording.is_some() {
+            anyhow::bail!("A recording is already in progress. Stop it first.");
+        }
+
+        let (domain, start_url) = if let Ok(tab) = state.active_tab() {
+            (
+                recording::extract_domain(&tab.current_url),
+                tab.current_url.clone(),
+            )
+        } else {
+            ("unknown".into(), String::new())
+        };
+
+        state.active_recording = Some(recording::Recording {
+            name: params.name.clone(),
+            domain: domain.clone(),
+            start_url,
+            created_at: recording::now_timestamp(),
+            description: params.description.clone(),
+            actions: Vec::new(),
+        });
+
+        info!(name = %params.name, domain = %domain, "recording started");
+        Ok(format!(
+            "Recording '{}' started for domain '{}'. Actions will be captured until stop_recording is called.",
+            params.name, domain
+        ))
+    }
+
+    async fn do_stop_recording(&self) -> anyhow::Result<String> {
+        let rec = {
+            let mut state = self.state.write().await;
+            state
+                .active_recording
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("No active recording to stop"))?
+        };
+
+        let action_count = rec.actions.len();
+        let path = self.store.save(&rec)?;
+
+        info!(name = %rec.name, actions = action_count, path = %path.display(), "recording saved");
+        Ok(format!(
+            "Recording '{}' saved with {} action(s) to {}",
+            rec.name,
+            action_count,
+            path.display()
+        ))
+    }
+
+    async fn do_replay_recording(
+        &self,
+        params: ReplayRecordingParams,
+    ) -> anyhow::Result<String> {
+        let rec = self.store.load(&params.name, params.domain.as_deref())?;
+        info!(name = %rec.name, actions = rec.actions.len(), "replaying recording");
+
+        {
+            let mut state = self.state.write().await;
+            state.replaying = true;
+        }
+
+        let replay_result = self.do_replay_actions(&rec).await;
+
+        {
+            let mut state = self.state.write().await;
+            state.replaying = false;
+        }
+
+        replay_result
+    }
+
+    async fn do_replay_actions(&self, rec: &recording::Recording) -> anyhow::Result<String> {
+        let mut step_results = Vec::new();
+
+        for (i, action) in rec.actions.iter().enumerate() {
+            let step_num = i + 1;
+            match action {
+                recording::RecordedAction::Navigate { url } => {
+                    self.do_navigate(url).await?;
+                    step_results.push(format!("Step {}: navigate → {}", step_num, url));
+                }
+                recording::RecordedAction::Click { locator, .. } => {
+                    let js = locator.click_js();
+                    self.execute_replay_step(&js, step_num).await?;
+                    step_results.push(format!("Step {}: click", step_num));
+                }
+                recording::RecordedAction::TypeText { locator, text, .. } => {
+                    let js = locator.type_js(text);
+                    self.execute_replay_step(&js, step_num).await?;
+                    step_results.push(format!("Step {}: type_text", step_num));
+                }
+                recording::RecordedAction::SelectOption { locator, value, .. } => {
+                    let js = locator.select_js(value);
+                    self.execute_replay_step(&js, step_num).await?;
+                    step_results.push(format!("Step {}: select_option", step_num));
+                }
+            }
+        }
+
+        let final_snapshot = self.do_snapshot().await?;
+        let summary = format!(
+            "Replay '{}' completed ({} steps):\n{}\n\n{}",
+            rec.name,
+            rec.actions.len(),
+            step_results.join("\n"),
+            final_snapshot,
+        );
+        Ok(summary)
+    }
+
+    /// Execute a JS step during replay, checking for NOT_FOUND.
+    async fn execute_replay_step(
+        &self,
+        js: &str,
+        step_num: usize,
+    ) -> anyhow::Result<()> {
+        let result_value = {
+            let state = self.state.read().await;
+            let tab = state.active_tab()?;
+            let eval = tab.page.evaluate(js).await.context("Failed to execute replay action")?;
+            eval.into_value::<String>().unwrap_or_default()
+        };
+
+        if result_value == "NOT_FOUND" {
+            anyhow::bail!("Replay step {}: element not found in the live DOM", step_num);
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        Ok(())
+    }
+
+    async fn do_list_recordings(
+        &self,
+        params: ListRecordingsParams,
+    ) -> anyhow::Result<String> {
+        let summaries = self.store.list(params.domain.as_deref())?;
+        if summaries.is_empty() {
+            return Ok("No recordings found.".into());
+        }
+
+        let lines: Vec<String> = summaries
+            .iter()
+            .map(|s| {
+                let desc = s
+                    .description
+                    .as_deref()
+                    .map(|d| format!(" - {d}"))
+                    .unwrap_or_default();
+                format!(
+                    "  {} [{}] ({} actions){}",
+                    s.name, s.domain, s.action_count, desc
+                )
+            })
+            .collect();
+
+        Ok(format!("Recordings:\n{}", lines.join("\n")))
+    }
+
+    async fn do_delete_recording(
+        &self,
+        params: DeleteRecordingParams,
+    ) -> anyhow::Result<String> {
+        self.store.delete(&params.name, params.domain.as_deref())?;
+        Ok(format!("Recording '{}' deleted.", params.name))
     }
 
     async fn do_scroll_to_ref(&self, ref_id: u32) -> anyhow::Result<String> {

@@ -6,4 +6,5 @@ pub mod hints;
 pub mod mcp;
 pub mod mutation;
 pub mod pipeline;
+pub mod recording;
 pub mod serialize;
