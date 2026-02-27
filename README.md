@@ -3,6 +3,8 @@
 [![Crates.io](https://img.shields.io/crates/v/cortex-browser)](https://crates.io/crates/cortex-browser)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+![cortex-browser banner](assets/banner.jpg)
+
 Compact browser perception layer for AI agents. Converts web pages into token-efficient semantic snapshots that LLMs can reason about.
 
 Takes raw HTML (thousands of DOM nodes, scripts, styles) and produces a clean, indented accessibility tree with stable ref IDs for interaction.
