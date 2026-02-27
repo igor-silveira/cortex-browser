@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum AriaRole {
@@ -139,7 +139,7 @@ pub struct PageSnapshot {
 pub type RefIndex = HashMap<u32, ElementLocator>;
 
 /// Stores enough info about a ref'd element to locate it in the live browser DOM.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ElementLocator {
     pub tag: String,
     pub id: Option<String>,
@@ -172,6 +172,60 @@ impl ElementLocator {
         format!(
             "Array.from(document.querySelectorAll('{}')).find(el => el.textContent.trim() === '{}')",
             self.tag, text
+        )
+    }
+
+    /// JS that finds the element and clicks it, handling `target="_blank"` links.
+    pub fn click_js(&self) -> String {
+        format!(
+            "(function() {{ \
+                var el = {find}; \
+                if (!el) return 'NOT_FOUND'; \
+                var a = el.closest('a[href]') || (el.tagName === 'A' && el.href ? el : null); \
+                if (a && a.target === '_blank') {{ \
+                    a.removeAttribute('target'); \
+                }} \
+                el.click(); \
+                return 'OK'; \
+            }})()",
+            find = self.to_js_expression()
+        )
+    }
+
+    /// JS that finds the element, focuses it, sets its value, and fires input/change events.
+    pub fn type_js(&self, text: &str) -> String {
+        let escaped = text
+            .replace('\\', "\\\\")
+            .replace('\'', "\\'")
+            .replace('\n', "\\n");
+        format!(
+            "(function() {{ \
+                var el = {find}; \
+                if (!el) return 'NOT_FOUND'; \
+                el.focus(); \
+                el.value = '{text}'; \
+                el.dispatchEvent(new Event('input', {{bubbles: true}})); \
+                el.dispatchEvent(new Event('change', {{bubbles: true}})); \
+                return 'OK'; \
+            }})()",
+            find = self.to_js_expression(),
+            text = escaped,
+        )
+    }
+
+    /// JS that finds the element, sets its value, and fires a change event.
+    pub fn select_js(&self, value: &str) -> String {
+        let escaped = value.replace('\\', "\\\\").replace('\'', "\\'");
+        format!(
+            "(function() {{ \
+                var el = {find}; \
+                if (!el) return 'NOT_FOUND'; \
+                el.value = '{value}'; \
+                el.dispatchEvent(new Event('change', {{bubbles: true}})); \
+                return 'OK'; \
+            }})()",
+            find = self.to_js_expression(),
+            value = escaped,
         )
     }
 }

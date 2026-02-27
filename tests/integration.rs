@@ -1,8 +1,9 @@
-use cortex_browser::dom::{AriaRole, PageSnapshot, SemanticNode};
+use cortex_browser::dom::{AriaRole, ElementLocator, PageSnapshot, SemanticNode};
 use cortex_browser::extract;
 use cortex_browser::hints::{self, TaskContext};
 use cortex_browser::mutation::DirtyState;
 use cortex_browser::pipeline;
+use cortex_browser::recording;
 use cortex_browser::serialize;
 
 // ── Test Fixtures ───────────────────────────────────────────────────────────
@@ -1359,4 +1360,236 @@ fn extract_simple_html_table() {
     assert_eq!(arr[0]["price"], "$9.99");
     assert_eq!(arr[1]["name"], "Gadget");
     assert_eq!(arr[1]["price"], "$19.50");
+}
+
+// ── Recording Tests ─────────────────────────────────────────────────────────
+
+#[test]
+fn recording_serialization_round_trip() {
+    let locator = ElementLocator {
+        tag: "input".into(),
+        id: Some("username".into()),
+        name: Some("user".into()),
+        input_type: Some("text".into()),
+        href: None,
+        text: String::new(),
+    };
+
+    let rec = recording::Recording {
+        name: "login-flow".into(),
+        domain: "example-com".into(),
+        start_url: "https://example.com/login".into(),
+        created_at: "1700000000".into(),
+        description: Some("Login test".into()),
+        actions: vec![
+            recording::RecordedAction::Navigate {
+                url: "https://example.com/login".into(),
+            },
+            recording::RecordedAction::TypeText {
+                locator: locator.clone(),
+                text: "admin".into(),
+                ref_id: 3,
+            },
+            recording::RecordedAction::Click {
+                locator: ElementLocator {
+                    tag: "button".into(),
+                    id: Some("submit-btn".into()),
+                    name: None,
+                    input_type: None,
+                    href: None,
+                    text: "Sign In".into(),
+                },
+                ref_id: 5,
+            },
+        ],
+    };
+
+    let json = serde_json::to_string_pretty(&rec).unwrap();
+    let deserialized: recording::Recording = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(deserialized.name, "login-flow");
+    assert_eq!(deserialized.domain, "example-com");
+    assert_eq!(deserialized.actions.len(), 3);
+    assert!(matches!(deserialized.actions[0], recording::RecordedAction::Navigate { .. }));
+    assert!(matches!(deserialized.actions[1], recording::RecordedAction::TypeText { .. }));
+    if let recording::RecordedAction::TypeText { ref text, .. } = deserialized.actions[1] {
+        assert_eq!(text, "admin");
+    }
+    assert!(matches!(deserialized.actions[2], recording::RecordedAction::Click { .. }));
+}
+
+#[test]
+fn element_locator_serde_preserves_js_expression() {
+    let locator = ElementLocator {
+        tag: "input".into(),
+        id: Some("email-field".into()),
+        name: None,
+        input_type: Some("email".into()),
+        href: None,
+        text: String::new(),
+    };
+
+    let js_before = locator.to_js_expression();
+    let json = serde_json::to_string(&locator).unwrap();
+    let restored: ElementLocator = serde_json::from_str(&json).unwrap();
+    let js_after = restored.to_js_expression();
+
+    assert_eq!(js_before, js_after);
+}
+
+#[test]
+fn domain_extraction() {
+    assert_eq!(recording::extract_domain("https://github.com/foo/bar"), "github-com");
+    assert_eq!(recording::extract_domain("http://localhost:3000/app"), "localhost");
+    assert_eq!(recording::extract_domain("https://sub.example.co.uk/path"), "sub-example-co-uk");
+    assert_eq!(recording::extract_domain("example.com"), "example-com");
+}
+
+#[test]
+fn filename_sanitization() {
+    assert_eq!(recording::sanitize_filename("login-flow"), "login-flow");
+    assert_eq!(recording::sanitize_filename("my flow!@#"), "my-flow");
+    assert_eq!(recording::sanitize_filename("test_recording_1"), "test_recording_1");
+    assert_eq!(recording::sanitize_filename("---"), "recording");
+    assert_eq!(recording::sanitize_filename(""), "recording");
+}
+
+#[test]
+fn recording_file_io_save_load_list_delete() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = recording::RecordingStore::with_base(tmp.path().to_path_buf());
+
+    let rec = recording::Recording {
+        name: "test-flow".into(),
+        domain: "example-com".into(),
+        start_url: "https://example.com".into(),
+        created_at: "1700000000".into(),
+        description: Some("A test".into()),
+        actions: vec![recording::RecordedAction::Navigate {
+            url: "https://example.com".into(),
+        }],
+    };
+
+    // Save
+    let path = store.save(&rec).unwrap();
+    assert!(path.exists());
+
+    // Load with domain
+    let loaded = store.load("test-flow", Some("example-com")).unwrap();
+    assert_eq!(loaded.name, "test-flow");
+    assert_eq!(loaded.actions.len(), 1);
+
+    // Load without domain (search all)
+    let loaded2 = store.load("test-flow", None).unwrap();
+    assert_eq!(loaded2.name, "test-flow");
+
+    // List all
+    let summaries = store.list(None).unwrap();
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].name, "test-flow");
+    assert_eq!(summaries[0].action_count, 1);
+
+    // List by domain
+    let summaries_dom = store.list(Some("example-com")).unwrap();
+    assert_eq!(summaries_dom.len(), 1);
+
+    // List wrong domain
+    let summaries_none = store.list(Some("other-com")).unwrap();
+    assert!(summaries_none.is_empty());
+
+    // Delete
+    store.delete("test-flow", Some("example-com")).unwrap();
+    assert!(store.load("test-flow", None).is_err());
+}
+
+#[test]
+fn recording_empty_actions() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = recording::RecordingStore::with_base(tmp.path().to_path_buf());
+
+    let rec = recording::Recording {
+        name: "empty".into(),
+        domain: "test-com".into(),
+        start_url: "https://test.com".into(),
+        created_at: "1700000000".into(),
+        description: None,
+        actions: vec![],
+    };
+
+    store.save(&rec).unwrap();
+    let loaded = store.load("empty", None).unwrap();
+    assert!(loaded.actions.is_empty());
+    assert!(loaded.description.is_none());
+}
+
+#[test]
+fn recording_load_not_found() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = recording::RecordingStore::with_base(tmp.path().to_path_buf());
+    let result = store.load("nonexistent", None);
+    assert!(result.is_err());
+}
+
+#[test]
+fn recording_summary_from_recording() {
+    let rec = recording::Recording {
+        name: "my-rec".into(),
+        domain: "test-com".into(),
+        start_url: "https://test.com".into(),
+        created_at: "1700000000".into(),
+        description: Some("desc".into()),
+        actions: vec![
+            recording::RecordedAction::Click {
+                locator: ElementLocator {
+                    tag: "button".into(),
+                    id: Some("btn".into()),
+                    name: None,
+                    input_type: None,
+                    href: None,
+                    text: "Go".into(),
+                },
+                ref_id: 1,
+            },
+        ],
+    };
+
+    let summary = recording::RecordingSummary::from(&rec);
+    assert_eq!(summary.name, "my-rec");
+    assert_eq!(summary.domain, "test-com");
+    assert_eq!(summary.created_at, "1700000000");
+    assert_eq!(summary.action_count, 1);
+    assert_eq!(summary.description.as_deref(), Some("desc"));
+}
+
+#[test]
+fn recording_multiple_domains() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = recording::RecordingStore::with_base(tmp.path().to_path_buf());
+
+    let rec1 = recording::Recording {
+        name: "flow-a".into(),
+        domain: "alpha-com".into(),
+        start_url: "https://alpha.com".into(),
+        created_at: "1".into(),
+        description: None,
+        actions: vec![],
+    };
+    let rec2 = recording::Recording {
+        name: "flow-b".into(),
+        domain: "beta-com".into(),
+        start_url: "https://beta.com".into(),
+        created_at: "2".into(),
+        description: None,
+        actions: vec![],
+    };
+
+    store.save(&rec1).unwrap();
+    store.save(&rec2).unwrap();
+
+    let all = store.list(None).unwrap();
+    assert_eq!(all.len(), 2);
+
+    let alpha_only = store.list(Some("alpha-com")).unwrap();
+    assert_eq!(alpha_only.len(), 1);
+    assert_eq!(alpha_only[0].name, "flow-a");
 }
