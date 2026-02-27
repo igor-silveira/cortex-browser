@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::dom::RefIndex;
-use crate::{browser, diff, hints, mutation, pipeline, serialize};
+use crate::{browser, diff, extract, hints, mutation, pipeline, serialize};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct NavigateParams {
@@ -110,6 +110,18 @@ pub struct CloseTabParams {
 pub struct ScrollToRefParams {
     /// The ref ID of the element to scroll into view (the number N from @eN)
     pub r#ref: u32,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ExtractParams {
+    /// A JSON Schema object describing the desired output shape. Supports objects with
+    /// properties, arrays of objects, and primitive types (string, number, boolean).
+    /// Example: {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}}}}
+    pub schema: serde_json::Value,
+    /// Optional CSS selector to scope extraction to a specific region (e.g., "table", "[role=list]").
+    /// If omitted, extracts from the full page.
+    #[serde(default)]
+    pub selector: Option<String>,
 }
 
 struct TabState {
@@ -343,6 +355,17 @@ impl CortexBrowserServer {
             Err(e) => format!("ERROR: Diff failed: {e}"),
         }
     }
+
+    #[tool(description = "Extract structured data from the current page as JSON, using a JSON Schema to describe the desired output shape. Deterministic extraction from the semantic tree - no LLM needed. Supports table extraction (maps column headers to schema properties), list extraction (repeated items), and single-object extraction (labeled values). Use 'selector' to scope to a page region (e.g., \"table\", \"[role=list]\").")]
+    async fn extract(
+        &self,
+        Parameters(params): Parameters<ExtractParams>,
+    ) -> String {
+        match self.do_extract(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Extract failed: {e}"),
+        }
+    }
 }
 
 #[tool_handler]
@@ -360,7 +383,8 @@ impl ServerHandler for CortexBrowserServer {
                  Use 'open_tab', 'list_tabs', 'switch_tab', 'close_tab' for multi-tab workflows. \
                  Use 'scroll_down', 'scroll_up', 'scroll_to_ref' to navigate within long pages. \
                  Elements marked [offscreen] are outside the current viewport. \
-                 Use 'page_diff' to see what changed since the last snapshot, or pass return_diff:true to click/type_text/select_option."
+                 Use 'page_diff' to see what changed since the last snapshot, or pass return_diff:true to click/type_text/select_option. \
+                 Use 'extract' with a JSON Schema to pull structured data (tables, lists, objects) from the page as JSON."
                     .into(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
@@ -993,6 +1017,31 @@ impl CortexBrowserServer {
             }
             None => Ok("no previous snapshot to compare - take a snapshot first".into()),
         }
+    }
+
+    async fn do_extract(&self, params: ExtractParams) -> anyhow::Result<String> {
+        debug!("extract requested");
+        let state = self.state.read().await;
+        let tab = state.active_tab()?;
+
+        let html = tab.page.content().await.context("Failed to get page content")?;
+        let url = tab
+            .page
+            .url()
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| tab.current_url.clone());
+
+        let snapshot = pipeline::process(&html, &url);
+
+        let result = extract::extract_with_schema(
+            &snapshot,
+            &params.schema,
+            params.selector.as_deref(),
+        );
+
+        Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|_| "null".into()))
     }
 
     async fn do_scroll_to_ref(&self, ref_id: u32) -> anyhow::Result<String> {

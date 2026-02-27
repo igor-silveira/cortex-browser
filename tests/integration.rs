@@ -1,4 +1,5 @@
 use cortex_browser::dom::{AriaRole, PageSnapshot, SemanticNode};
+use cortex_browser::extract;
 use cortex_browser::hints::{self, TaskContext};
 use cortex_browser::mutation::DirtyState;
 use cortex_browser::pipeline;
@@ -1075,4 +1076,287 @@ fn cookie_consent_banner_is_present() {
         has_node(&snapshot.nodes, &AriaRole::Button, "Manage Preferences"),
         "cookie consent Manage button should be present"
     );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STRUCTURED DATA EXTRACTION TESTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[test]
+fn extract_table_from_dashboard() {
+    let snapshot = snap(DASHBOARD);
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "order_id": { "type": "string" },
+                "customer": { "type": "string" },
+                "product": { "type": "string" },
+                "status": { "type": "string" },
+                "total": { "type": "string" }
+            }
+        }
+    });
+
+    let result = extract::extract_with_schema(&snapshot, &schema, None);
+    assert!(result.is_array(), "should return an array");
+    let arr = result.as_array().unwrap();
+    assert!(
+        !arr.is_empty(),
+        "should extract at least one row from dashboard table"
+    );
+
+    // Check the first row has expected fields
+    let first = &arr[0];
+    assert!(first.get("customer").is_some(), "should have customer field");
+    assert!(first.get("product").is_some(), "should have product field");
+    assert!(first.get("status").is_some(), "should have status field");
+    assert!(first.get("total").is_some(), "should have total field");
+}
+
+#[test]
+fn extract_table_with_selector() {
+    let snapshot = snap(DASHBOARD);
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "customer": { "type": "string" },
+                "total": { "type": "string" }
+            }
+        }
+    });
+
+    let result = extract::extract_with_schema(&snapshot, &schema, Some("table"));
+    assert!(result.is_array(), "table selector should return an array");
+    let arr = result.as_array().unwrap();
+    assert!(!arr.is_empty(), "should extract rows with table selector");
+}
+
+#[test]
+fn extract_list_items_from_ecommerce() {
+    let snapshot = snap(ECOMMERCE);
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "price": { "type": "string" }
+            }
+        }
+    });
+
+    let result = extract::extract_with_schema(&snapshot, &schema, Some("[role=list]"));
+    assert!(result.is_array(), "should return an array for list extraction");
+    let arr = result.as_array().unwrap();
+    // The ecommerce page has product cards in a list
+    assert!(
+        !arr.is_empty(),
+        "should extract items from ecommerce product list"
+    );
+}
+
+#[test]
+fn extract_single_object() {
+    let html = r#"
+        <main>
+            <h1>Product Details</h1>
+            <p>Name: Widget Pro</p>
+            <p>Price: $29.99</p>
+            <p>In Stock: Yes</p>
+        </main>
+    "#;
+    let snapshot = snap(html);
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": { "type": "string" },
+            "price": { "type": "string" },
+            "in_stock": { "type": "string" }
+        }
+    });
+
+    let result = extract::extract_with_schema(&snapshot, &schema, None);
+    assert!(result.is_object(), "should return an object");
+}
+
+#[test]
+fn extract_type_coercion_number() {
+    let html = r#"
+        <table>
+            <thead><tr><th>Item</th><th>Price</th><th>Quantity</th></tr></thead>
+            <tbody>
+                <tr><td>Widget</td><td>$9.99</td><td>5</td></tr>
+                <tr><td>Gadget</td><td>$19.50</td><td>3</td></tr>
+            </tbody>
+        </table>
+    "#;
+    let snapshot = snap(html);
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "item": { "type": "string" },
+                "price": { "type": "number" },
+                "quantity": { "type": "integer" }
+            }
+        }
+    });
+
+    let result = extract::extract_with_schema(&snapshot, &schema, None);
+    assert!(result.is_array());
+    let arr = result.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "should extract 2 rows");
+
+    let first = &arr[0];
+    assert_eq!(first.get("item").and_then(|v| v.as_str()), Some("Widget"));
+    // Price should be coerced to number
+    let price = first.get("price").and_then(|v| v.as_f64());
+    assert!(price.is_some(), "price should be a number");
+    assert!((price.unwrap() - 9.99).abs() < 0.01, "price should be 9.99");
+    // Quantity should be coerced to integer
+    let qty = first.get("quantity").and_then(|v| v.as_i64());
+    assert_eq!(qty, Some(5), "quantity should be 5");
+}
+
+#[test]
+fn extract_type_coercion_boolean() {
+    let val = extract::coerce_value("true", "boolean");
+    assert_eq!(val, serde_json::Value::Bool(true));
+
+    let val = extract::coerce_value("yes", "boolean");
+    assert_eq!(val, serde_json::Value::Bool(true));
+
+    let val = extract::coerce_value("checked", "boolean");
+    assert_eq!(val, serde_json::Value::Bool(true));
+
+    let val = extract::coerce_value("false", "boolean");
+    assert_eq!(val, serde_json::Value::Bool(false));
+
+    let val = extract::coerce_value("no", "boolean");
+    assert_eq!(val, serde_json::Value::Bool(false));
+}
+
+#[test]
+fn extract_empty_schema_returns_null() {
+    let snapshot = snap(DASHBOARD);
+    let schema = serde_json::json!({});
+    let result = extract::extract_with_schema(&snapshot, &schema, None);
+    assert!(result.is_null(), "empty schema should return null");
+}
+
+#[test]
+fn extract_no_matches_returns_empty_array() {
+    let html = "<p>Hello world</p>";
+    let snapshot = snap(html);
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "nonexistent_field": { "type": "string" }
+            }
+        }
+    });
+    let result = extract::extract_with_schema(&snapshot, &schema, None);
+    assert!(result.is_array(), "should return an array");
+    let arr = result.as_array().unwrap();
+    assert!(arr.is_empty(), "should be empty when no tables or lists match");
+}
+
+#[test]
+fn extract_collect_text_recursive() {
+    let node = SemanticNode {
+        ref_id: 0,
+        role: AriaRole::ListItem,
+        name: String::new(),
+        value: None,
+        attrs: vec![],
+        children: vec![
+            SemanticNode {
+                ref_id: 0,
+                role: AriaRole::Heading { level: 3 },
+                name: "Product Name".into(),
+                value: None,
+                attrs: vec![],
+                children: vec![],
+                offscreen: None,
+            },
+            SemanticNode {
+                ref_id: 0,
+                role: AriaRole::StaticText,
+                name: "$49.99".into(),
+                value: None,
+                attrs: vec![],
+                children: vec![],
+                offscreen: None,
+            },
+        ],
+        offscreen: None,
+    };
+
+    let text = extract::collect_text(&node);
+    assert!(text.contains("Product Name"), "should collect heading text");
+    assert!(text.contains("$49.99"), "should collect static text");
+}
+
+#[test]
+fn extract_match_field_scoring() {
+    let node = SemanticNode {
+        ref_id: 0,
+        role: AriaRole::StaticText,
+        name: "Customer".into(),
+        value: None,
+        attrs: vec![],
+        children: vec![],
+        offscreen: None,
+    };
+
+    // Exact match should score highest
+    let exact = extract::match_field("customer", &node);
+    assert!(exact >= 10.0, "exact match should score >= 10");
+
+    // Contains match
+    let contains = extract::match_field("cust", &node);
+    assert!(contains >= 5.0, "contains match should score >= 5");
+
+    // No match
+    let no_match = extract::match_field("zzzzz", &node);
+    assert!(no_match == 0.0, "no match should score 0, got {no_match}");
+}
+
+#[test]
+fn extract_simple_html_table() {
+    let html = r#"
+        <table>
+            <thead><tr><th>Name</th><th>Price</th></tr></thead>
+            <tbody>
+                <tr><td>Widget</td><td>$9.99</td></tr>
+                <tr><td>Gadget</td><td>$19.50</td></tr>
+            </tbody>
+        </table>
+    "#;
+    let snapshot = snap(html);
+    let schema = serde_json::json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "price": { "type": "string" }
+            }
+        }
+    });
+
+    let result = extract::extract_with_schema(&snapshot, &schema, None);
+    let arr = result.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "should extract 2 rows");
+    assert_eq!(arr[0]["name"], "Widget");
+    assert_eq!(arr[0]["price"], "$9.99");
+    assert_eq!(arr[1]["name"], "Gadget");
+    assert_eq!(arr[1]["price"], "$19.50");
 }
