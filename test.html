@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GitHub - Sign In</title>
+    <style>body { font-family: sans-serif; }</style>
+    <script>console.log("noise");</script>
+</head>
+<body>
+    <header>
+        <nav aria-label="Global">
+            <a href="/">GitHub</a>
+            <a href="/features">Features</a>
+            <a href="/pricing">Pricing</a>
+        </nav>
+    </header>
+    <main>
+        <div class="container">
+            <div class="inner-wrapper">
+                <h1>Sign in to GitHub</h1>
+                <form action="/login" method="post">
+                    <div class="field">
+                        <label for="user">Username or email address</label>
+                        <input type="text" id="user" name="login" placeholder="Username or email address" required>
+                    </div>
+                    <div class="field">
+                        <label for="pass">Password</label>
+                        <input type="password" id="pass" name="password" placeholder="Password">
+                    </div>
+                    <div class="field">
+                        <input type="checkbox" id="remember" name="remember">
+                        <label for="remember">Keep me signed in</label>
+                    </div>
+                    <button type="submit">Sign in</button>
+                </form>
+                <p>New to GitHub? <a href="/signup">Create an account</a>.</p>
+                <p><a href="/password_reset">Forgot password?</a></p>
+            </div>
+        </div>
+        <div aria-hidden="true" class="decoration">
+            <img src="bg.png" alt="">
+        </div>
+    </main>
+    <footer>
+        <ul>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/security">Security</a></li>
+            <li><a href="/contact">Contact GitHub</a></li>
+        </ul>
+    </footer>
+</body>
+</html>

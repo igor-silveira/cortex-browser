@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Understanding Rust's Borrow Checker - TechBlog</title>
+    <meta name="description" content="A deep dive into Rust's ownership system and borrow checker">
+    <meta property="og:title" content="Understanding Rust's Borrow Checker">
+    <meta property="og:type" content="article">
+    <link rel="stylesheet" href="/css/tailwind.css">
+    <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin>
+    <script src="https://cdn.analytics.example.com/tracker.js" async></script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Understanding Rust's Borrow Checker"}</script>
+    <style>
+        .prose{max-width:65ch;color:#374151}
+        .prose h2{margin-top:2em;margin-bottom:1em;font-weight:700;font-size:1.5em}
+        .prose p{margin-bottom:1.25em;line-height:1.75}
+        .prose code{background:#f3f4f6;padding:.125em .25em;border-radius:.25em;font-size:.875em}
+        .prose pre{background:#1f2937;color:#f9fafb;padding:1em;border-radius:.5em;overflow-x:auto}
+    </style>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+    <div id="__next" data-reactroot="">
+        <!-- Cookie consent banner -->
+        <div class="fixed bottom-0 inset-x-0 z-50 bg-gray-900 text-white p-4" role="region" aria-label="Cookie consent">
+            <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+                <p class="text-sm text-gray-300">We use cookies to improve your experience. By continuing to browse, you agree to our use of cookies.</p>
+                <div class="flex gap-2 flex-shrink-0">
+                    <button class="px-4 py-2 bg-white text-gray-900 text-sm font-medium rounded-md hover:bg-gray-100">Accept All</button>
+                    <button class="px-4 py-2 border border-gray-600 text-sm font-medium rounded-md hover:bg-gray-800">Manage Preferences</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Header -->
+        <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-100">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-8">
+                        <a href="/" class="text-xl font-bold text-gray-900">
+                            <span class="text-blue-600">Tech</span>Blog
+                        </a>
+                        <nav class="hidden md:flex items-center space-x-6" aria-label="Main">
+                            <a href="/articles" class="text-sm font-medium text-gray-600 hover:text-gray-900">Articles</a>
+                            <a href="/tutorials" class="text-sm font-medium text-gray-600 hover:text-gray-900">Tutorials</a>
+                            <a href="/podcast" class="text-sm font-medium text-gray-600 hover:text-gray-900">Podcast</a>
+                            <a href="/newsletter" class="text-sm font-medium text-gray-600 hover:text-gray-900">Newsletter</a>
+                        </nav>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button class="p-2 text-gray-500 hover:text-gray-700" aria-label="Search articles">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        </button>
+                        <a href="/subscribe" class="hidden sm:inline-flex px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Subscribe</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Article -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+            <div class="lg:grid lg:grid-cols-3 lg:gap-12">
+                <!-- Article content -->
+                <article class="lg:col-span-2 prose max-w-none">
+                    <!-- Breadcrumbs -->
+                    <nav class="mb-8 not-prose" aria-label="Breadcrumb">
+                        <ol class="flex items-center space-x-2 text-sm text-gray-500" role="list">
+                            <li><a href="/" class="hover:text-gray-700">Home</a></li>
+                            <li aria-hidden="true">/</li>
+                            <li><a href="/articles" class="hover:text-gray-700">Articles</a></li>
+                            <li aria-hidden="true">/</li>
+                            <li class="text-gray-900" aria-current="page">Understanding Rust's Borrow Checker</li>
+                        </ol>
+                    </nav>
+
+                    <header class="mb-12 not-prose">
+                        <div class="flex items-center gap-2 mb-4">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Rust</span>
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Programming</span>
+                        </div>
+                        <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight sm:text-5xl">Understanding Rust's Borrow Checker</h1>
+                        <p class="mt-4 text-xl text-gray-600">A practical guide to ownership, borrowing, and lifetimes - the concepts that make Rust unique among systems languages.</p>
+                        <div class="mt-6 flex items-center gap-4">
+                            <img src="/avatars/author.jpg" alt="" class="h-10 w-10 rounded-full" aria-hidden="true">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900"><a href="/authors/elena">Elena Rodriguez</a></p>
+                                <p class="text-sm text-gray-500">Published Jan 15, 2025 · 12 min read</p>
+                            </div>
+                        </div>
+                    </header>
+
+                    <img src="/images/rust-borrow-checker.jpg" alt="Diagram showing Rust ownership tree with references branching out" class="rounded-xl mb-8 w-full">
+
+                    <h2>Why the Borrow Checker Exists</h2>
+                    <p>Rust's borrow checker is the compiler's way of enforcing memory safety without a garbage collector. It ensures that references to data follow strict rules at compile time, preventing entire classes of bugs that plague C and C++ programs: use-after-free, double-free, data races, and dangling pointers.</p>
+                    <p>The key insight is that memory safety can be guaranteed through a type system that tracks ownership. Every value in Rust has exactly one owner, and when that owner goes out of scope, the value is dropped. This simple rule, combined with borrowing semantics, eliminates the need for runtime garbage collection.</p>
+
+                    <h2>The Three Rules of Borrowing</h2>
+                    <p>At its core, Rust's borrowing system enforces three simple rules that prevent data races at compile time. These rules might feel restrictive at first, but they encode decades of hard-won wisdom about concurrent programming into the type system itself.</p>
+
+                    <h2>Practical Patterns</h2>
+                    <p>Once you internalize the borrow checker's rules, you'll find that most code naturally falls into patterns that satisfy the compiler. Here are some common patterns that work well with Rust's ownership model and help you write code that is both safe and ergonomic.</p>
+
+                    <!-- Share buttons -->
+                    <div class="not-prose mt-12 pt-8 border-t border-gray-200">
+                        <p class="text-sm font-medium text-gray-900 mb-3">Share this article</p>
+                        <div class="flex gap-3">
+                            <a href="https://twitter.com/intent/tweet?url=..." class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200" aria-label="Share on Twitter">
+                                <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                                Twitter
+                            </a>
+                            <a href="https://www.linkedin.com/sharing/share-offsite/?url=..." class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200" aria-label="Share on LinkedIn">
+                                <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg>
+                                LinkedIn
+                            </a>
+                            <button class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200" aria-label="Copy link">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                                Copy Link
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Comments -->
+                    <section class="not-prose mt-12" aria-label="Comments">
+                        <h2 class="text-xl font-bold text-gray-900 mb-6">Comments (24)</h2>
+                        <form class="mb-8">
+                            <label for="comment" class="block text-sm font-medium text-gray-700 mb-2">Leave a comment</label>
+                            <textarea id="comment" name="comment" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Share your thoughts..."></textarea>
+                            <div class="mt-3 flex items-center justify-between">
+                                <p class="text-xs text-gray-500">Markdown supported. Be respectful.</p>
+                                <button type="submit" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Post Comment</button>
+                            </div>
+                        </form>
+                        <div class="space-y-6">
+                            <div class="flex gap-4">
+                                <img src="/avatars/user1.jpg" alt="" class="h-8 w-8 rounded-full flex-shrink-0" aria-hidden="true">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium text-gray-900">Kenji T.</span>
+                                        <span class="text-xs text-gray-500">2 hours ago</span>
+                                    </div>
+                                    <p class="mt-1 text-sm text-gray-700">Great article! The section on practical patterns really helped me understand how to work with the borrow checker instead of fighting it.</p>
+                                    <button class="mt-2 text-xs text-gray-500 hover:text-gray-700">Reply</button>
+                                </div>
+                            </div>
+                            <div class="flex gap-4">
+                                <img src="/avatars/user2.jpg" alt="" class="h-8 w-8 rounded-full flex-shrink-0" aria-hidden="true">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium text-gray-900">Priya S.</span>
+                                        <span class="text-xs text-gray-500">5 hours ago</span>
+                                    </div>
+                                    <p class="mt-1 text-sm text-gray-700">Would love to see a follow-up on lifetimes specifically. That's where I always get stuck when writing complex data structures.</p>
+                                    <button class="mt-2 text-xs text-gray-500 hover:text-gray-700">Reply</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </article>
+
+                <!-- Sidebar -->
+                <aside class="mt-12 lg:mt-0" aria-label="Sidebar">
+                    <div class="sticky top-24 space-y-8">
+                        <!-- Newsletter -->
+                        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                            <h3 class="text-lg font-bold text-gray-900">Weekly Newsletter</h3>
+                            <p class="mt-2 text-sm text-gray-600">Join 12,000+ developers. No spam, unsubscribe anytime.</p>
+                            <form class="mt-4 space-y-3">
+                                <input type="text" placeholder="Your name" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" aria-label="Your name">
+                                <input type="email" placeholder="you@example.com" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" required aria-label="Email address">
+                                <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Subscribe</button>
+                            </form>
+                        </div>
+
+                        <!-- Related articles -->
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-900 mb-4">Related Articles</h3>
+                            <div class="space-y-4">
+                                <a href="/articles/async-rust" class="block group">
+                                    <div class="flex gap-3">
+                                        <img src="/images/thumb-1.jpg" alt="" class="h-16 w-16 rounded-md object-cover flex-shrink-0" aria-hidden="true">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-gray-900 group-hover:text-blue-600">Async Rust: From Futures to Tokio</h4>
+                                            <p class="text-xs text-gray-500 mt-1">Dec 28, 2024</p>
+                                        </div>
+                                    </div>
+                                </a>
+                                <a href="/articles/error-handling" class="block group">
+                                    <div class="flex gap-3">
+                                        <img src="/images/thumb-2.jpg" alt="" class="h-16 w-16 rounded-md object-cover flex-shrink-0" aria-hidden="true">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-gray-900 group-hover:text-blue-600">Error Handling in Rust: A Complete Guide</h4>
+                                            <p class="text-xs text-gray-500 mt-1">Dec 15, 2024</p>
+                                        </div>
+                                    </div>
+                                </a>
+                                <a href="/articles/trait-objects" class="block group">
+                                    <div class="flex gap-3">
+                                        <img src="/images/thumb-3.jpg" alt="" class="h-16 w-16 rounded-md object-cover flex-shrink-0" aria-hidden="true">
+                                        <div>
+                                            <h4 class="text-sm font-medium text-gray-900 group-hover:text-blue-600">Dynamic Dispatch with Trait Objects</h4>
+                                            <p class="text-xs text-gray-500 mt-1">Nov 30, 2024</p>
+                                        </div>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Tags -->
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-900 mb-3">Topics</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <a href="/tags/rust" class="px-3 py-1 bg-gray-100 text-sm text-gray-700 rounded-full hover:bg-gray-200">Rust</a>
+                                <a href="/tags/memory-safety" class="px-3 py-1 bg-gray-100 text-sm text-gray-700 rounded-full hover:bg-gray-200">Memory Safety</a>
+                                <a href="/tags/systems-programming" class="px-3 py-1 bg-gray-100 text-sm text-gray-700 rounded-full hover:bg-gray-200">Systems Programming</a>
+                                <a href="/tags/compilers" class="px-3 py-1 bg-gray-100 text-sm text-gray-700 rounded-full hover:bg-gray-200">Compilers</a>
+                                <a href="/tags/concurrency" class="px-3 py-1 bg-gray-100 text-sm text-gray-700 rounded-full hover:bg-gray-200">Concurrency</a>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-50 border-t border-gray-200 mt-16">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                    <p class="text-sm text-gray-500">&copy; 2025 TechBlog. All rights reserved.</p>
+                    <nav class="flex gap-6" aria-label="Footer">
+                        <a href="/privacy" class="text-sm text-gray-500 hover:text-gray-700">Privacy Policy</a>
+                        <a href="/terms" class="text-sm text-gray-500 hover:text-gray-700">Terms of Service</a>
+                        <a href="/rss" class="text-sm text-gray-500 hover:text-gray-700">RSS Feed</a>
+                    </nav>
+                </div>
+            </div>
+        </footer>
+    </div>
+    <noscript>Please enable JavaScript to view comments.</noscript>
+</body>
+</html>

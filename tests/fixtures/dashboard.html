@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <title>Acme Dashboard - Analytics</title>
+    <link rel="stylesheet" href="/dist/styles.css">
+    <script src="/dist/vendor.js"></script>
+    <script src="/dist/app.js" type="module"></script>
+    <style>[data-radix-popper-content-wrapper]{z-index:50}</style>
+</head>
+<body class="h-full bg-gray-100 overflow-hidden">
+    <div id="root" data-reactroot="">
+        <div class="flex h-full">
+            <!-- Sidebar -->
+            <aside class="hidden lg:flex lg:flex-shrink-0">
+                <div class="flex flex-col w-64 border-r border-gray-200 bg-white">
+                    <div class="flex items-center h-16 px-6 border-b border-gray-200">
+                        <div class="flex items-center gap-2">
+                            <div class="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                                <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            </div>
+                            <span class="text-lg font-bold text-gray-900">Acme</span>
+                        </div>
+                    </div>
+                    <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto" aria-label="Sidebar navigation">
+                        <a href="/dashboard" class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-md" aria-current="page">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                            Dashboard
+                        </a>
+                        <a href="/analytics" class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            Analytics
+                        </a>
+                        <a href="/customers" class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                            Customers
+                        </a>
+                        <a href="/orders" class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            Orders
+                        </a>
+                        <a href="/products" class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                            Products
+                        </a>
+                        <hr class="my-3 border-gray-200">
+                        <a href="/settings" class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            Settings
+                        </a>
+                    </nav>
+                    <div class="p-4 border-t border-gray-200">
+                        <div class="flex items-center gap-3">
+                            <img src="/avatars/user.jpg" alt="" class="h-8 w-8 rounded-full" aria-hidden="true">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">Sarah Chen</p>
+                                <p class="text-xs text-gray-500 truncate">sarah@acme.com</p>
+                            </div>
+                            <button class="text-gray-400 hover:text-gray-600" aria-label="User menu">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main content area -->
+            <div class="flex flex-col flex-1 overflow-hidden">
+                <!-- Top bar -->
+                <header class="flex items-center justify-between h-16 px-6 bg-white border-b border-gray-200">
+                    <div class="flex items-center gap-4">
+                        <button class="lg:hidden text-gray-500 hover:text-gray-700" aria-label="Toggle sidebar">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                        </button>
+                        <!-- Breadcrumbs -->
+                        <nav aria-label="Breadcrumb">
+                            <ol class="flex items-center space-x-2 text-sm" role="list">
+                                <li><a href="/dashboard" class="text-gray-500 hover:text-gray-700">Dashboard</a></li>
+                                <li class="text-gray-400" aria-hidden="true">/</li>
+                                <li class="font-medium text-gray-900" aria-current="page">Analytics</li>
+                            </ol>
+                        </nav>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <input type="search" placeholder="Search..." class="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500" aria-label="Search dashboard">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none" aria-hidden="true">
+                                <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                            </div>
+                        </div>
+                        <button class="relative p-2 text-gray-500 hover:text-gray-700" aria-label="Notifications">
+                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                            <span class="absolute top-1 right-1 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" aria-hidden="true"></span>
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Dashboard content -->
+                <main class="flex-1 overflow-y-auto p-6">
+                    <div class="max-w-7xl mx-auto">
+                        <div class="flex items-center justify-between mb-6">
+                            <h1 class="text-2xl font-bold text-gray-900">Analytics Overview</h1>
+                            <div class="flex items-center gap-2">
+                                <select class="text-sm border-gray-300 rounded-md" aria-label="Time period">
+                                    <option value="7d">Last 7 days</option>
+                                    <option value="30d" selected>Last 30 days</option>
+                                    <option value="90d">Last 90 days</option>
+                                    <option value="1y">Last year</option>
+                                </select>
+                                <button class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Export Report</button>
+                            </div>
+                        </div>
+
+                        <!-- Stats cards -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-500">Total Revenue</p>
+                                        <p class="text-2xl font-bold text-gray-900 mt-1">$48,352</p>
+                                    </div>
+                                    <div class="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center" aria-hidden="true">
+                                        <svg class="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-sm text-green-600">+12.5% from last month</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-500">Orders</p>
+                                        <p class="text-2xl font-bold text-gray-900 mt-1">1,248</p>
+                                    </div>
+                                    <div class="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center" aria-hidden="true">
+                                        <svg class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-sm text-green-600">+8.2% from last month</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-500">Customers</p>
+                                        <p class="text-2xl font-bold text-gray-900 mt-1">3,891</p>
+                                    </div>
+                                    <div class="h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center" aria-hidden="true">
+                                        <svg class="h-5 w-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-sm text-red-600">-2.1% from last month</p>
+                            </div>
+                            <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-500">Conversion</p>
+                                        <p class="text-2xl font-bold text-gray-900 mt-1">3.24%</p>
+                                    </div>
+                                    <div class="h-10 w-10 bg-yellow-100 rounded-full flex items-center justify-center" aria-hidden="true">
+                                        <svg class="h-5 w-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                                    </div>
+                                </div>
+                                <p class="mt-2 text-sm text-green-600">+0.3% from last month</p>
+                            </div>
+                        </div>
+
+                        <!-- Data table -->
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                                <h2 class="text-lg font-semibold text-gray-900">Recent Orders</h2>
+                                <div class="flex items-center gap-2">
+                                    <input type="search" placeholder="Filter orders..." class="px-3 py-1.5 border border-gray-300 rounded-md text-sm" aria-label="Filter orders">
+                                    <button class="px-3 py-1.5 border border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">
+                                        <svg class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+                                        Filters
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7291">#ORD-7291</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Alex Rivera</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">SoundMax Pro</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Delivered</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$249.99</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7290">#ORD-7290</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Maya Patel</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">BassKing X1</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Shipped</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$89.99</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7289">#ORD-7289</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Jordan Kim</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">PodMini x2</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Processing</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$79.98</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7288">#ORD-7288</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Sam O'Brien</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">NoiseBuster ANC</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Cancelled</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$179.99</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7287">#ORD-7287</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Lin Zhang</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">AeroFit Lite</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Delivered</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$59.99</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7286">#ORD-7286</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Taylor Brooks</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">StudioElite</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Delivered</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$349.99</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                        <tr class="hover:bg-gray-50">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600"><a href="/orders/ORD-7285">#ORD-7285</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Chris Nakamura</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">SoundMax Pro</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Shipped</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$249.99</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right"><button class="text-sm text-blue-600 hover:text-blue-800">View</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+                                <p class="text-sm text-gray-500">Showing 1 to 7 of 1,248 results</p>
+                                <nav class="flex items-center gap-1" aria-label="Table pagination">
+                                    <button class="px-3 py-1 text-sm border border-gray-300 rounded-md text-gray-500" disabled>Previous</button>
+                                    <button class="px-3 py-1 text-sm bg-blue-600 text-white rounded-md" aria-current="page">1</button>
+                                    <button class="px-3 py-1 text-sm border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50">2</button>
+                                    <button class="px-3 py-1 text-sm border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50">3</button>
+                                    <button class="px-3 py-1 text-sm border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50">Next</button>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden modal for order details -->
+    <div id="order-modal" role="dialog" aria-labelledby="modal-title" aria-modal="true" style="display:none" class="fixed inset-0 z-50">
+        <div class="fixed inset-0 bg-black/50" aria-hidden="true"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+                <h3 id="modal-title" class="text-lg font-semibold">Order Details</h3>
+                <button class="absolute top-4 right-4 text-gray-400 hover:text-gray-600" aria-label="Close dialog">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

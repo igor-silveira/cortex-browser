@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Project Settings - Nimbus App</title>
+    <script src="/app/vendor.js"></script>
+    <script src="/app/main.js" type="module"></script>
+    <link rel="stylesheet" href="/app/styles.css">
+    <style>
+        [data-state="closed"]{display:none}
+        [data-radix-scroll-area-viewport]{overflow:hidden}
+        .animate-spin{animation:spin 1s linear infinite}
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div id="app" data-v-app="">
+        <!-- Top nav -->
+        <header class="bg-white border-b border-gray-200">
+            <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <a href="/home" class="font-bold text-lg text-gray-900" aria-label="Nimbus home">Nimbus</a>
+                    <span class="text-gray-300" aria-hidden="true">/</span>
+                    <span class="text-sm text-gray-600">Project Settings</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="relative p-2 text-gray-500 hover:text-gray-700" aria-label="Notifications (2 unread)">
+                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                        <span class="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" aria-hidden="true"></span>
+                    </button>
+                    <button class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100" aria-label="Account menu" aria-expanded="false" aria-haspopup="true">
+                        <img src="/avatars/me.jpg" alt="" class="h-7 w-7 rounded-full" aria-hidden="true">
+                        <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-5xl mx-auto px-4 py-8">
+            <h1 class="text-2xl font-bold text-gray-900 mb-8">Project Settings</h1>
+
+            <!-- Tab navigation -->
+            <div role="tablist" aria-label="Settings sections" class="border-b border-gray-200 mb-8">
+                <button role="tab" aria-selected="true" aria-controls="panel-general" id="tab-general" class="px-4 py-2 text-sm font-medium text-blue-600 border-b-2 border-blue-600 -mb-px">General</button>
+                <button role="tab" aria-selected="false" aria-controls="panel-members" id="tab-members" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">Members</button>
+                <button role="tab" aria-selected="false" aria-controls="panel-billing" id="tab-billing" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">Billing</button>
+                <button role="tab" aria-selected="false" aria-controls="panel-danger" id="tab-danger" class="px-4 py-2 text-sm font-medium text-red-500 hover:text-red-700">Danger Zone</button>
+            </div>
+
+            <!-- General tab panel (active) -->
+            <div role="tabpanel" id="panel-general" aria-labelledby="tab-general">
+                <!-- General settings form -->
+                <form class="space-y-8">
+                    <section>
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Project Information</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <label for="project-name" class="block text-sm font-medium text-gray-700">Project Name</label>
+                                <input type="text" id="project-name" name="name" value="My Awesome Project" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label for="project-slug" class="block text-sm font-medium text-gray-700">Project Slug</label>
+                                <div class="mt-1 flex rounded-md shadow-sm">
+                                    <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-sm text-gray-500">nimbus.app/</span>
+                                    <input type="text" id="project-slug" name="slug" value="my-awesome-project" class="flex-1 block w-full px-3 py-2 border border-gray-300 rounded-r-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div>
+                                <label for="project-desc" class="block text-sm font-medium text-gray-700">Description</label>
+                                <textarea id="project-desc" name="description" rows="3" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Describe your project..."></textarea>
+                            </div>
+                            <div>
+                                <label for="project-url" class="block text-sm font-medium text-gray-700">Website URL</label>
+                                <input type="url" id="project-url" name="url" placeholder="https://example.com" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+                    </section>
+
+                    <hr class="border-gray-200">
+
+                    <!-- Notification preferences -->
+                    <section>
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Notification Preferences</h2>
+                        <div class="space-y-4">
+                            <div class="flex items-start gap-3">
+                                <div class="flex items-center h-5">
+                                    <input type="checkbox" id="notify-email" name="notify_email" checked class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="notify-email" class="text-sm font-medium text-gray-700">Email notifications</label>
+                                    <p class="text-xs text-gray-500">Get notified about deployments and errors via email.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="flex items-center h-5">
+                                    <input type="checkbox" id="notify-slack" name="notify_slack" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="notify-slack" class="text-sm font-medium text-gray-700">Slack integration</label>
+                                    <p class="text-xs text-gray-500">Post updates to a Slack channel.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <div class="flex items-center h-5">
+                                    <input type="checkbox" id="notify-webhook" name="notify_webhook" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label for="notify-webhook" class="text-sm font-medium text-gray-700">Webhook</label>
+                                    <p class="text-xs text-gray-500">Send events to a custom HTTP endpoint.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <hr class="border-gray-200">
+
+                    <!-- Environment selector (radio group) -->
+                    <section>
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Default Environment</h2>
+                        <div class="space-y-3" role="radiogroup" aria-label="Default environment">
+                            <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+                                <input type="radio" name="environment" value="development" class="h-4 w-4 border-gray-300 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">Development</span>
+                                    <p class="text-xs text-gray-500">For local testing and experimentation</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+                                <input type="radio" name="environment" value="staging" checked class="h-4 w-4 border-gray-300 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">Staging</span>
+                                    <p class="text-xs text-gray-500">Pre-production environment for QA</p>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+                                <input type="radio" name="environment" value="production" class="h-4 w-4 border-gray-300 text-blue-600">
+                                <div>
+                                    <span class="text-sm font-medium text-gray-900">Production</span>
+                                    <p class="text-xs text-gray-500">Live environment serving real users</p>
+                                </div>
+                            </label>
+                        </div>
+                    </section>
+
+                    <hr class="border-gray-200">
+
+                    <!-- Accordion / collapsible sections -->
+                    <section>
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Advanced Settings</h2>
+                        <div class="border border-gray-200 rounded-lg divide-y divide-gray-200">
+                            <div>
+                                <button class="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50" aria-expanded="true" aria-controls="acc-build">
+                                    Build Configuration
+                                    <svg class="h-5 w-5 text-gray-400 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div id="acc-build" class="px-4 pb-4">
+                                    <div class="space-y-3">
+                                        <div>
+                                            <label for="build-cmd" class="block text-sm text-gray-700">Build Command</label>
+                                            <input type="text" id="build-cmd" value="npm run build" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono">
+                                        </div>
+                                        <div>
+                                            <label for="output-dir" class="block text-sm text-gray-700">Output Directory</label>
+                                            <input type="text" id="output-dir" value="dist" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono">
+                                        </div>
+                                        <div>
+                                            <label for="node-version" class="block text-sm text-gray-700">Node.js Version</label>
+                                            <select id="node-version" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                                                <option value="18">18 LTS</option>
+                                                <option value="20" selected>20 LTS</option>
+                                                <option value="22">22 Current</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <button class="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50" aria-expanded="false" aria-controls="acc-env">
+                                    Environment Variables
+                                    <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div id="acc-env" data-state="closed" class="px-4 pb-4">
+                                    <p class="text-sm text-gray-500">Configure environment variables for your builds.</p>
+                                </div>
+                            </div>
+                            <div>
+                                <button class="w-full flex items-center justify-between px-4 py-3 text-left text-sm font-medium text-gray-900 hover:bg-gray-50" aria-expanded="false" aria-controls="acc-domains">
+                                    Custom Domains
+                                    <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </button>
+                                <div id="acc-domains" data-state="closed" class="px-4 pb-4">
+                                    <p class="text-sm text-gray-500">Add custom domains to your project.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Progress indicator -->
+                    <section>
+                        <h2 class="text-lg font-semibold text-gray-900 mb-4">Storage Usage</h2>
+                        <div>
+                            <div class="flex items-center justify-between text-sm mb-1">
+                                <span class="text-gray-700">2.4 GB of 10 GB used</span>
+                                <span class="text-gray-500">24%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2" role="progressbar" aria-valuenow="24" aria-valuemin="0" aria-valuemax="100" aria-label="Storage usage">
+                                <div class="bg-blue-600 h-2 rounded-full" style="width: 24%"></div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Form actions -->
+                    <div class="flex items-center justify-end gap-3 pt-4">
+                        <button type="button" class="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">Save Changes</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Hidden tab panels -->
+            <div role="tabpanel" id="panel-members" aria-labelledby="tab-members" hidden>
+                <p>Members panel content</p>
+            </div>
+            <div role="tabpanel" id="panel-billing" aria-labelledby="tab-billing" hidden>
+                <p>Billing panel content</p>
+            </div>
+            <div role="tabpanel" id="panel-danger" aria-labelledby="tab-danger" hidden>
+                <p>Danger zone content</p>
+            </div>
+        </main>
+
+        <!-- Toast notification (aria-live) -->
+        <div class="fixed bottom-4 right-4 z-50" aria-live="polite" style="display:none">
+            <div class="bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span>Settings saved successfully!</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
