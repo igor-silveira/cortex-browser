@@ -14,9 +14,7 @@ pub async fn connect(port: u16) -> Result<Browser> {
         .await
         .with_context(|| format!("Failed to connect to Chrome on port {port}. Is Chrome running with --remote-debugging-port={port}?"))?;
 
-    tokio::spawn(async move {
-        while handler.next().await.is_some() {}
-    });
+    tokio::spawn(async move { while handler.next().await.is_some() {} });
 
     info!(port = port, "connected to Chrome");
     Ok(browser)
@@ -36,9 +34,7 @@ pub async fn launch() -> Result<Browser> {
         .await
         .context("Failed to launch Chrome. Is Chrome/Chromium installed?")?;
 
-    tokio::spawn(async move {
-        while handler.next().await.is_some() {}
-    });
+    tokio::spawn(async move { while handler.next().await.is_some() {} });
 
     info!("headless Chrome launched");
     Ok(browser)

@@ -77,7 +77,9 @@ pub const SCROLL_UP_JS: &str = r#"(function() {
 /// JavaScript to get visibility of elements by their ref locator JS expressions.
 /// Dynamically constructed per-snapshot based on ref entries.
 pub fn build_check_visibility_js(ref_expressions: &[(u32, String)]) -> String {
-    let mut checks = String::from("(function() { var vt = window.scrollY || 0; var vh = window.innerHeight; var result = {};");
+    let mut checks = String::from(
+        "(function() { var vt = window.scrollY || 0; var vh = window.innerHeight; var result = {};",
+    );
     for (ref_id, js_expr) in ref_expressions {
         checks.push_str(&format!(
             " try {{ var el = {js_expr}; if (el) {{ var r = el.getBoundingClientRect(); result['{ref_id}'] = !(r.bottom < 0 || r.top > vh); }} }} catch(e) {{}}",

@@ -156,12 +156,16 @@ impl ElementLocator {
             return format!("document.getElementById('{}')", js_escape(id));
         }
         if let Some(name) = &self.name {
-            let type_sel = self.input_type.as_ref()
+            let type_sel = self
+                .input_type
+                .as_ref()
                 .map(|t| format!("[type=\"{}\"]", js_escape(t)))
                 .unwrap_or_default();
             return format!(
                 "document.querySelector('{}[name=\"{}\"]{}') ",
-                self.tag, js_escape(name), type_sel
+                self.tag,
+                js_escape(name),
+                type_sel
             );
         }
         if let Some(href) = &self.href {

@@ -8,8 +8,23 @@ use crate::dom::{AriaRole, ElementLocator, PageSnapshot, ProcessResult, Semantic
 
 /// Tags that carry zero agent-relevant information and should be removed entirely.
 const PRUNED_TAGS: &[&str] = &[
-    "script", "style", "noscript", "meta", "link", "head", "svg", "path", "defs", "clippath",
-    "lineargradient", "template", "iframe", "object", "embed", "br", "wbr",
+    "script",
+    "style",
+    "noscript",
+    "meta",
+    "link",
+    "head",
+    "svg",
+    "path",
+    "defs",
+    "clippath",
+    "lineargradient",
+    "template",
+    "iframe",
+    "object",
+    "embed",
+    "br",
+    "wbr",
 ];
 
 /// Map from element id → label text, built by pre-scanning `<label for="...">` elements.
@@ -47,9 +62,8 @@ fn compute_stable_ref(
     used_refs: &HashSet<u32>,
 ) -> u32 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    let has_strong_identity = el.attr("id").is_some()
-        || el.attr("name").is_some()
-        || el.attr("href").is_some();
+    let has_strong_identity =
+        el.attr("id").is_some() || el.attr("name").is_some() || el.attr("href").is_some();
 
     tag.hash(&mut hasher);
 
@@ -117,7 +131,12 @@ pub fn process_with_refs(html: &str, url: &str) -> ProcessResult {
         nodes.iter().map(|n| 1 + count_nodes(&n.children)).sum()
     }
     let node_count = count_nodes(&nodes);
-    debug!(nodes = node_count, refs = ref_count, labels = labels.len(), "pipeline complete");
+    debug!(
+        nodes = node_count,
+        refs = ref_count,
+        labels = labels.len(),
+        "pipeline complete"
+    );
 
     ProcessResult {
         snapshot: PageSnapshot {
@@ -181,14 +200,17 @@ fn process_element(
         let ref_id = if role.is_interactive() {
             let id = compute_stable_ref(tag, el, &name, &ref_ctx.path, &ref_ctx.used_refs);
             ref_ctx.used_refs.insert(id);
-            ref_ctx.ref_entries.push((id, ElementLocator {
-                tag: tag.to_string(),
-                id: el.attr("id").map(String::from),
-                name: el.attr("name").map(String::from),
-                input_type: el.attr("type").map(String::from),
-                href: el.attr("href").map(String::from),
-                text: name.clone(),
-            }));
+            ref_ctx.ref_entries.push((
+                id,
+                ElementLocator {
+                    tag: tag.to_string(),
+                    id: el.attr("id").map(String::from),
+                    name: el.attr("name").map(String::from),
+                    input_type: el.attr("type").map(String::from),
+                    href: el.attr("href").map(String::from),
+                    text: name.clone(),
+                },
+            ));
             id
         } else {
             0
@@ -439,7 +461,10 @@ fn extract_relevant_attrs(tag: &str, el: &scraper::node::Element) -> Vec<(String
     // e.g. "password" is useful for a textbox, but "checkbox" is redundant for AriaRole::Checkbox.
     if tag == "input" {
         if let Some(t) = el.attr("type") {
-            if matches!(t, "password" | "email" | "url" | "tel" | "search" | "number") {
+            if matches!(
+                t,
+                "password" | "email" | "url" | "tel" | "search" | "number"
+            ) {
                 attrs.push(("type".into(), t.into()));
             }
         }
@@ -599,9 +624,9 @@ mod tests {
     }
 
     fn has_role(nodes: &[SemanticNode], role: &AriaRole) -> bool {
-        nodes.iter().any(|n| {
-            n.role == *role || has_role(&n.children, role)
-        })
+        nodes
+            .iter()
+            .any(|n| n.role == *role || has_role(&n.children, role))
     }
 
     fn find_by_role<'a>(nodes: &'a [SemanticNode], role: &AriaRole) -> Option<&'a SemanticNode> {
@@ -633,8 +658,16 @@ mod tests {
 
     #[test]
     fn prune_svg_entirely() {
-        let s = snap(r#"<body><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/></svg><p>After SVG</p></body>"#);
-        let text = s.nodes.iter().map(|n| &n.name).cloned().collect::<Vec<_>>().join(" ");
+        let s = snap(
+            r#"<body><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/></svg><p>After SVG</p></body>"#,
+        );
+        let text = s
+            .nodes
+            .iter()
+            .map(|n| &n.name)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ");
         assert!(!text.contains("circle"));
         assert!(!text.contains("viewBox"));
     }
@@ -649,7 +682,8 @@ mod tests {
 
     #[test]
     fn prune_display_none() {
-        let s = snap(r#"<body><div style="display:none"><p>Invisible</p></div><p>Shown</p></body>"#);
+        let s =
+            snap(r#"<body><div style="display:none"><p>Invisible</p></div><p>Shown</p></body>"#);
         let all_text = collect_text(&s.nodes);
         assert!(!all_text.contains("Invisible"));
         assert!(all_text.contains("Shown"));
@@ -657,7 +691,8 @@ mod tests {
 
     #[test]
     fn prune_visibility_hidden() {
-        let s = snap(r#"<body><div style="visibility: hidden"><p>Ghost</p></div><p>Real</p></body>"#);
+        let s =
+            snap(r#"<body><div style="visibility: hidden"><p>Ghost</p></div><p>Real</p></body>"#);
         let all_text = collect_text(&s.nodes);
         assert!(!all_text.contains("Ghost"));
         assert!(all_text.contains("Real"));
@@ -673,7 +708,10 @@ mod tests {
 
     #[test]
     fn prune_hidden_input() {
-        let result = process_with_refs(r#"<form><input type="hidden" name="token"><input type="text" name="user"></form>"#, "");
+        let result = process_with_refs(
+            r#"<form><input type="hidden" name="token"><input type="text" name="user"></form>"#,
+            "",
+        );
         // form + textbox get refs (both are interactive)
         assert_eq!(result.ref_index.len(), 2);
     }
@@ -700,10 +738,12 @@ mod tests {
 
     #[test]
     fn input_types_map_correctly() {
-        let s = snap(r#"<body>
+        let s = snap(
+            r#"<body>
             <input type="text"><input type="checkbox"><input type="radio">
             <input type="submit" value="Go"><input type="password">
-        </body>"#);
+        </body>"#,
+        );
         assert!(has_role(&s.nodes, &AriaRole::TextBox));
         assert!(has_role(&s.nodes, &AriaRole::Checkbox));
         assert!(has_role(&s.nodes, &AriaRole::Radio));
@@ -804,10 +844,7 @@ mod tests {
 
     #[test]
     fn locator_uses_id_when_available() {
-        let result = process_with_refs(
-            r#"<body><button id="submit-btn">Go</button></body>"#,
-            "",
-        );
+        let result = process_with_refs(r#"<body><button id="submit-btn">Go</button></body>"#, "");
         let locator = result.ref_index.values().next().unwrap();
         assert!(locator.to_js_expression().contains("getElementById"));
         assert!(locator.to_js_expression().contains("submit-btn"));
@@ -815,10 +852,7 @@ mod tests {
 
     #[test]
     fn locator_uses_name_when_no_id() {
-        let result = process_with_refs(
-            r#"<body><input type="text" name="username"></body>"#,
-            "",
-        );
+        let result = process_with_refs(r#"<body><input type="text" name="username"></body>"#, "");
         let locator = result.ref_index.values().next().unwrap();
         assert!(locator.to_js_expression().contains("username"));
     }
@@ -896,14 +930,36 @@ mod tests {
         // the path changing, because id and name are prioritized in the hash.
         // Actually, path does change - but the elements have id/href which dominate.
         // Let's check that the button ref is present in both.
-        let btn_ref_1 = r1.ref_index.iter().find(|(_, loc)| loc.tag == "button").map(|(id, _)| *id);
-        let btn_ref_2 = r2.ref_index.iter().find(|(_, loc)| loc.tag == "button").map(|(id, _)| *id);
+        let btn_ref_1 = r1
+            .ref_index
+            .iter()
+            .find(|(_, loc)| loc.tag == "button")
+            .map(|(id, _)| *id);
+        let btn_ref_2 = r2
+            .ref_index
+            .iter()
+            .find(|(_, loc)| loc.tag == "button")
+            .map(|(id, _)| *id);
         assert!(btn_ref_1.is_some());
-        assert_eq!(btn_ref_1, btn_ref_2, "button with id should keep same ref after content insertion");
+        assert_eq!(
+            btn_ref_1, btn_ref_2,
+            "button with id should keep same ref after content insertion"
+        );
 
-        let link_ref_1 = r1.ref_index.iter().find(|(_, loc)| loc.tag == "a").map(|(id, _)| *id);
-        let link_ref_2 = r2.ref_index.iter().find(|(_, loc)| loc.tag == "a").map(|(id, _)| *id);
-        assert_eq!(link_ref_1, link_ref_2, "link with href should keep same ref");
+        let link_ref_1 = r1
+            .ref_index
+            .iter()
+            .find(|(_, loc)| loc.tag == "a")
+            .map(|(id, _)| *id);
+        let link_ref_2 = r2
+            .ref_index
+            .iter()
+            .find(|(_, loc)| loc.tag == "a")
+            .map(|(id, _)| *id);
+        assert_eq!(
+            link_ref_1, link_ref_2,
+            "link with href should keep same ref"
+        );
     }
 
     #[test]
@@ -927,7 +983,11 @@ mod tests {
         sorted.sort();
         sorted.dedup();
         assert_eq!(refs.len(), sorted.len(), "no duplicate ref IDs: {:?}", refs);
-        assert!(refs.iter().all(|&r| r >= 10000 && r <= 99999), "all refs in 5-digit range: {:?}", refs);
+        assert!(
+            refs.iter().all(|&r| r >= 10000 && r <= 99999),
+            "all refs in 5-digit range: {:?}",
+            refs
+        );
     }
 
     #[test]
@@ -937,7 +997,10 @@ mod tests {
         let refs = collect_all_refs(&result.snapshot.nodes);
         assert!(!refs.is_empty());
         for r in &refs {
-            assert!(*r >= 10000 && *r <= 99999, "ref {r} should be in [10000, 99999]");
+            assert!(
+                *r >= 10000 && *r <= 99999,
+                "ref {r} should be in [10000, 99999]"
+            );
         }
     }
 }
