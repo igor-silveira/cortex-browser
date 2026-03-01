@@ -59,14 +59,17 @@ struct FlatNode {
 fn flatten_nodes(nodes: &[SemanticNode], depth: usize, out: &mut HashMap<String, FlatNode>) {
     for node in nodes {
         let identity = compute_identity(node, depth);
-        out.insert(identity, FlatNode {
-            role: node.role.clone(),
-            ref_id: node.ref_id,
-            name: node.name.clone(),
-            value: node.value.clone(),
-            attrs: node.attrs.clone(),
-            offscreen: node.offscreen,
-        });
+        out.insert(
+            identity,
+            FlatNode {
+                role: node.role.clone(),
+                ref_id: node.ref_id,
+                name: node.name.clone(),
+                value: node.value.clone(),
+                attrs: node.attrs.clone(),
+                offscreen: node.offscreen,
+            },
+        );
         flatten_nodes(&node.children, depth + 1, out);
     }
 }
@@ -274,9 +277,7 @@ mod tests {
 
     #[test]
     fn no_changes_produces_empty_diff() {
-        let snap = make_snapshot(vec![
-            make_node(AriaRole::Button, "Submit", 12345),
-        ]);
+        let snap = make_snapshot(vec![make_node(AriaRole::Button, "Submit", 12345)]);
         let diff = diff_snapshots(&snap, &snap);
         assert!(diff.entries.is_empty());
         assert_eq!(diff.total_changes, 0);
@@ -284,15 +285,16 @@ mod tests {
 
     #[test]
     fn added_element_detected() {
-        let old = make_snapshot(vec![
-            make_node(AriaRole::Button, "Submit", 12345),
-        ]);
+        let old = make_snapshot(vec![make_node(AriaRole::Button, "Submit", 12345)]);
         let new = make_snapshot(vec![
             make_node(AriaRole::Button, "Submit", 12345),
             make_node(AriaRole::Button, "Cancel", 23456),
         ]);
         let diff = diff_snapshots(&old, &new);
-        assert!(diff.entries.iter().any(|e| matches!(e, DiffEntry::Added(n) if n.name == "Cancel")));
+        assert!(diff
+            .entries
+            .iter()
+            .any(|e| matches!(e, DiffEntry::Added(n) if n.name == "Cancel")));
     }
 
     #[test]
@@ -301,26 +303,35 @@ mod tests {
             make_node(AriaRole::Button, "Submit", 12345),
             make_node(AriaRole::Button, "Cancel", 23456),
         ]);
-        let new = make_snapshot(vec![
-            make_node(AriaRole::Button, "Submit", 12345),
-        ]);
+        let new = make_snapshot(vec![make_node(AriaRole::Button, "Submit", 12345)]);
         let diff = diff_snapshots(&old, &new);
-        assert!(diff.entries.iter().any(|e| matches!(e, DiffEntry::Removed(n) if n.name == "Cancel")));
+        assert!(diff
+            .entries
+            .iter()
+            .any(|e| matches!(e, DiffEntry::Removed(n) if n.name == "Cancel")));
     }
 
     #[test]
     fn value_change_detected() {
-        let old = make_snapshot(vec![
-            make_node_with_value(AriaRole::TextBox, "Name", 12345, ""),
-        ]);
-        let new = make_snapshot(vec![
-            make_node_with_value(AriaRole::TextBox, "Name", 12345, "John"),
-        ]);
+        let old = make_snapshot(vec![make_node_with_value(
+            AriaRole::TextBox,
+            "Name",
+            12345,
+            "",
+        )]);
+        let new = make_snapshot(vec![make_node_with_value(
+            AriaRole::TextBox,
+            "Name",
+            12345,
+            "John",
+        )]);
         let diff = diff_snapshots(&old, &new);
         assert_eq!(diff.total_changes, 1);
         match &diff.entries[0] {
             DiffEntry::Modified { changes, .. } => {
-                assert!(changes.iter().any(|c| matches!(c, FieldChange::ValueChanged { new, .. } if new == "John")));
+                assert!(changes
+                    .iter()
+                    .any(|c| matches!(c, FieldChange::ValueChanged { new, .. } if new == "John")));
             }
             _ => panic!("expected Modified"),
         }
@@ -337,7 +348,10 @@ mod tests {
             total_changes: 1,
         };
         let text = format_diff(&diff);
-        assert!(text.contains("+ button @e12345 \"Submit\""), "output: {text}");
+        assert!(
+            text.contains("+ button @e12345 \"Submit\""),
+            "output: {text}"
+        );
     }
 
     #[test]
@@ -351,7 +365,10 @@ mod tests {
             total_changes: 1,
         };
         let text = format_diff(&diff);
-        assert!(text.contains("- button @e12345 \"Submit\""), "output: {text}");
+        assert!(
+            text.contains("- button @e12345 \"Submit\""),
+            "output: {text}"
+        );
     }
 
     #[test]
@@ -371,7 +388,10 @@ mod tests {
             total_changes: 1,
         };
         let text = format_diff(&diff);
-        assert!(text.contains("~ textbox @e23456 \"Name\""), "output: {text}");
+        assert!(
+            text.contains("~ textbox @e23456 \"Name\""),
+            "output: {text}"
+        );
         assert!(text.contains("\"\" -> \"John\""), "output: {text}");
     }
 
@@ -386,13 +406,20 @@ mod tests {
 
     #[test]
     fn diff_with_non_interactive_nodes() {
-        let old = make_snapshot(vec![
-            make_node(AriaRole::Heading { level: 1 }, "Old Title", 0),
-        ]);
-        let new = make_snapshot(vec![
-            make_node(AriaRole::Heading { level: 1 }, "New Title", 0),
-        ]);
+        let old = make_snapshot(vec![make_node(
+            AriaRole::Heading { level: 1 },
+            "Old Title",
+            0,
+        )]);
+        let new = make_snapshot(vec![make_node(
+            AriaRole::Heading { level: 1 },
+            "New Title",
+            0,
+        )]);
         let diff = diff_snapshots(&old, &new);
-        assert!(diff.total_changes >= 1, "heading name change should be detected");
+        assert!(
+            diff.total_changes >= 1,
+            "heading name change should be detected"
+        );
     }
 }

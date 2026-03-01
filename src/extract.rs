@@ -180,10 +180,7 @@ pub fn extract_table(table: &SemanticNode, properties: &Map<String, Value>) -> V
     results
 }
 
-pub fn extract_list_items(
-    items: &[&SemanticNode],
-    properties: &Map<String, Value>,
-) -> Vec<Value> {
+pub fn extract_list_items(items: &[&SemanticNode], properties: &Map<String, Value>) -> Vec<Value> {
     let mut results = Vec::new();
 
     for item in items {
@@ -250,15 +247,12 @@ pub fn coerce_value(text: &str, schema_type: &str) -> Value {
                 .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
                 .collect();
             if schema_type == "integer" {
-                numeric
-                    .parse::<i64>()
-                    .map(Value::from)
-                    .unwrap_or_else(|_| {
-                        numeric
-                            .parse::<f64>()
-                            .map(|f| Value::from(f as i64))
-                            .unwrap_or(Value::Null)
-                    })
+                numeric.parse::<i64>().map(Value::from).unwrap_or_else(|_| {
+                    numeric
+                        .parse::<f64>()
+                        .map(|f| Value::from(f as i64))
+                        .unwrap_or(Value::Null)
+                })
             } else {
                 numeric
                     .parse::<f64>()
@@ -358,7 +352,11 @@ fn map_properties_to_columns(
             } else {
                 let overlap = prop_words
                     .iter()
-                    .filter(|w| header_words.iter().any(|hw| hw.contains(w.as_str()) || w.contains(hw.as_str())))
+                    .filter(|w| {
+                        header_words
+                            .iter()
+                            .any(|hw| hw.contains(w.as_str()) || w.contains(hw.as_str()))
+                    })
                     .count();
                 if overlap > 0 {
                     score += overlap as f32 * 3.0;
@@ -432,7 +430,16 @@ fn role_hint_score(name: &str, node: &SemanticNode) -> f32 {
     }
 
     if name.contains("status") || name.contains("state") {
-        let status_words = ["delivered", "shipped", "processing", "pending", "cancelled", "active", "inactive", "completed"];
+        let status_words = [
+            "delivered",
+            "shipped",
+            "processing",
+            "pending",
+            "cancelled",
+            "active",
+            "inactive",
+            "completed",
+        ];
         if status_words.iter().any(|w| text.contains(w)) {
             score += 3.0;
         }
@@ -441,7 +448,12 @@ fn role_hint_score(name: &str, node: &SemanticNode) -> f32 {
     score
 }
 
-fn scan_for_field(node: &SemanticNode, prop_name: &str, best_score: &mut f32, best_text: &mut String) {
+fn scan_for_field(
+    node: &SemanticNode,
+    prop_name: &str,
+    best_score: &mut f32,
+    best_text: &mut String,
+) {
     let score = match_field(prop_name, node);
     if score > *best_score {
         *best_score = score;

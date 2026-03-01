@@ -6,14 +6,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::dom::ElementLocator;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum RecordedAction {
-    Navigate { url: String },
-    Click { locator: ElementLocator, ref_id: u32 },
-    TypeText { locator: ElementLocator, text: String, ref_id: u32 },
-    SelectOption { locator: ElementLocator, value: String, ref_id: u32 },
+    Navigate {
+        url: String,
+    },
+    Click {
+        locator: ElementLocator,
+        ref_id: u32,
+    },
+    TypeText {
+        locator: ElementLocator,
+        text: String,
+        ref_id: u32,
+    },
+    SelectOption {
+        locator: ElementLocator,
+        value: String,
+        ref_id: u32,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +85,13 @@ pub fn extract_domain(url: &str) -> String {
 pub fn sanitize_filename(name: &str) -> String {
     let sanitized: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
     let trimmed = sanitized.trim_matches('-');
     if trimmed.is_empty() {
@@ -105,7 +123,9 @@ impl Default for RecordingStore {
 
 impl RecordingStore {
     pub fn new() -> Self {
-        Self { base: recordings_dir() }
+        Self {
+            base: recordings_dir(),
+        }
     }
 
     pub fn with_base(base: PathBuf) -> Self {
@@ -163,7 +183,11 @@ impl RecordingStore {
 
         let dirs: Vec<PathBuf> = if let Some(d) = domain {
             let p = self.base.join(d);
-            if p.exists() { vec![p] } else { vec![] }
+            if p.exists() {
+                vec![p]
+            } else {
+                vec![]
+            }
         } else {
             fs::read_dir(&self.base)?
                 .filter_map(|e| e.ok())

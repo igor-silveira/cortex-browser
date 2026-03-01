@@ -63,8 +63,7 @@ fn serialize_node(node: &SemanticNode, indent: usize, output: &mut String) {
             // Name: skip for containers whose children convey the content.
             // But if children would be suppressed (redundant), show the name to avoid
             // losing content entirely.
-            let suppress_name =
-                is_container_with_children(node) && !has_redundant_children(node);
+            let suppress_name = is_container_with_children(node) && !has_redundant_children(node);
             if !node.name.is_empty() && !suppress_name {
                 output.push_str(&format!(" \"{}\"", node.name));
             }
@@ -499,7 +498,10 @@ mod tests {
             }),
         };
         let text = to_compact_text(&snap);
-        assert!(text.contains("viewport: 0-900 of 4200px"), "viewport line: {text}");
+        assert!(
+            text.contains("viewport: 0-900 of 4200px"),
+            "viewport line: {text}"
+        );
     }
 
     #[test]
@@ -532,7 +534,10 @@ mod tests {
         };
         let text = to_compact_text(&snap);
         assert!(text.contains("[offscreen]"), "offscreen annotation: {text}");
-        assert!(text.contains("@e12345 [offscreen]"), "offscreen after ref: {text}");
+        assert!(
+            text.contains("@e12345 [offscreen]"),
+            "offscreen after ref: {text}"
+        );
     }
 
     #[test]
@@ -552,6 +557,9 @@ mod tests {
             viewport: None,
         };
         let text = to_compact_text(&snap);
-        assert!(!text.contains("[offscreen]"), "visible elements should not have [offscreen]: {text}");
+        assert!(
+            !text.contains("[offscreen]"),
+            "visible elements should not have [offscreen]: {text}"
+        );
     }
 }
