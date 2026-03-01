@@ -198,10 +198,7 @@ impl ElementLocator {
 
     /// JS that finds the element, focuses it, sets its value, and fires input/change events.
     pub fn type_js(&self, text: &str) -> String {
-        let escaped = text
-            .replace('\\', "\\\\")
-            .replace('\'', "\\'")
-            .replace('\n', "\\n");
+        let escaped = js_escape(text);
         format!(
             "(function() {{ \
                 var el = {find}; \
@@ -219,7 +216,7 @@ impl ElementLocator {
 
     /// JS that finds the element, sets its value, and fires a change event.
     pub fn select_js(&self, value: &str) -> String {
-        let escaped = value.replace('\\', "\\\\").replace('\'', "\\'");
+        let escaped = js_escape(value);
         format!(
             "(function() {{ \
                 var el = {find}; \
@@ -239,6 +236,10 @@ fn js_escape(s: &str) -> String {
         .replace('\'', "\\'")
         .replace('"', "\\\"")
         .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\0', "\\0")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
 }
 
 /// Result of processing HTML, including both the snapshot and the ref index.

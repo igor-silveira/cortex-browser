@@ -779,12 +779,24 @@ impl CortexBrowserServer {
         self.ensure_browser().await?;
 
         let mut state = self.state.write().await;
-        let browser = state.browser.as_ref().context("No browser")?;
 
-        let page = browser
-            .new_page(url)
-            .await
-            .with_context(|| format!("Failed to navigate to {url}"))?;
+        // Reuse existing page if we have an active tab, otherwise create a new one.
+        let page = if state.tabs.is_empty() {
+            let browser = state.browser.as_ref().context("No browser")?;
+            browser
+                .new_page(url)
+                .await
+                .with_context(|| format!("Failed to navigate to {url}"))?
+        } else {
+            let tab = state.active_tab()?;
+            tab.page
+                .goto(url)
+                .await
+                .with_context(|| format!("Failed to navigate to {url}"))?;
+            // Return a reference isn't possible here, so we re-fetch below.
+            // The page is already in the tab state - we'll update it in place.
+            state.active_tab()?.page.clone()
+        };
 
         page.wait_for_navigation().await.ok();
 
@@ -835,7 +847,6 @@ impl CortexBrowserServer {
             url: url.to_string(),
         });
 
-        // page is moved into state below - no more CDP calls
         if state.tabs.is_empty() {
             let tab_id = state.next_tab_id;
             state.next_tab_id += 1;
@@ -859,7 +870,6 @@ impl CortexBrowserServer {
             let tab = state.active_tab_mut()?;
             let text = apply_task_context(&tab.task_context, &result.snapshot);
             tab.previous_snapshot = None;
-            tab.page = page;
             tab.ref_index = result.ref_index;
             tab.current_url = final_url.clone();
             tab.cached_snapshot = Some(text.clone());
@@ -1617,28 +1627,11 @@ impl CortexBrowserServer {
         let state = self.state.read().await;
         let tab = state.active_tab()?;
 
-        let js = "(function() { \
-            return JSON.stringify(document.cookie.split('; ').filter(Boolean).map(function(c) { \
-                var parts = c.split('='); \
-                return { name: parts[0], value: parts.slice(1).join('=') }; \
-            })); \
-        })()";
-
-        let cookies_json = tab
+        let cookies = tab
             .page
-            .evaluate(js)
+            .get_cookies()
             .await
-            .ok()
-            .and_then(|v| v.into_value::<String>().ok())
-            .unwrap_or_else(|| "[]".into());
-
-        #[derive(Deserialize)]
-        struct SimpleCookie {
-            name: String,
-            value: String,
-        }
-
-        let cookies: Vec<SimpleCookie> = serde_json::from_str(&cookies_json).unwrap_or_default();
+            .context("Failed to get cookies via CDP")?;
 
         if cookies.is_empty() {
             return Ok("No cookies found for the current page.".into());
@@ -1647,12 +1640,30 @@ impl CortexBrowserServer {
         let lines: Vec<String> = cookies
             .iter()
             .map(|c| {
-                let val_preview = if c.value.len() > 40 {
-                    format!("{}...", &c.value[..40])
+                let val_preview = if c.value.chars().count() > 40 {
+                    let truncated: String = c.value.chars().take(40).collect();
+                    format!("{truncated}...")
                 } else {
                     c.value.clone()
                 };
-                format!("  {} = {}", c.name, val_preview)
+                let flags = [
+                    if c.http_only { Some("httpOnly") } else { None },
+                    if c.secure { Some("secure") } else { None },
+                    if c.session { Some("session") } else { None },
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(", ");
+                let flags_str = if flags.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [{flags}]")
+                };
+                format!(
+                    "  {} = {} (domain: {}, path: {}){flags_str}",
+                    c.name, val_preview, c.domain, c.path
+                )
             })
             .collect();
 
@@ -1668,53 +1679,40 @@ impl CortexBrowserServer {
         let state = self.state.read().await;
         let tab = state.active_tab()?;
 
-        let js = "(function() { \
-            return JSON.stringify(document.cookie.split('; ').filter(Boolean).map(function(c) { \
-                var parts = c.split('='); \
-                return { name: parts[0], value: parts.slice(1).join('='), domain: location.hostname, path: '/' }; \
-            })); \
-        })()";
-
-        let cookies_json = tab
+        let cdp_cookies = tab
             .page
-            .evaluate(js)
+            .get_cookies()
             .await
-            .ok()
-            .and_then(|v| v.into_value::<String>().ok())
-            .unwrap_or_else(|| "[]".into());
+            .context("Failed to get cookies via CDP")?;
 
-        #[derive(Deserialize)]
-        struct RawCookie {
-            name: String,
-            value: String,
-            domain: String,
-            path: String,
-        }
-
-        let raw_cookies: Vec<RawCookie> = serde_json::from_str(&cookies_json).unwrap_or_default();
-
-        let stored: Vec<auth::StoredCookie> = raw_cookies
+        let stored: Vec<auth::StoredCookie> = cdp_cookies
             .into_iter()
             .map(|c| auth::StoredCookie {
                 name: c.name,
                 value: c.value,
                 domain: c.domain,
                 path: c.path,
-                expires: None,
-                http_only: false,
-                secure: false,
-                same_site: None,
+                expires: if c.expires > 0.0 {
+                    Some(c.expires)
+                } else {
+                    None
+                },
+                http_only: c.http_only,
+                secure: c.secure,
+                same_site: c.same_site.map(|s| s.as_ref().to_string()),
             })
             .collect();
 
         let url = &tab.current_url;
         let cookie_count = stored.len();
+        let http_only_count = stored.iter().filter(|c| c.http_only).count();
         let path = self.auth_store.save(url, &params.profile, stored)?;
 
         Ok(format!(
-            "Auth profile '{}' saved with {} cookie(s) to {}",
+            "Auth profile '{}' saved with {} cookie(s) ({} httpOnly) to {}",
             params.profile,
             cookie_count,
+            http_only_count,
             path.display()
         ))
     }
@@ -1728,22 +1726,43 @@ impl CortexBrowserServer {
         let state = self.state.read().await;
         let tab = state.active_tab()?;
 
-        let mut restored = 0;
-        for cookie in &profile.cookies {
-            let js = format!(
-                "document.cookie = '{}={}; path={}; domain={}'",
-                cookie.name.replace('\'', "\\'"),
-                cookie.value.replace('\'', "\\'"),
-                cookie.path,
-                cookie.domain,
-            );
-            tab.page.evaluate(js).await.ok();
-            restored += 1;
-        }
+        let cookie_params: Vec<chromiumoxide::cdp::browser_protocol::network::CookieParam> =
+            profile
+                .cookies
+                .iter()
+                .map(|c| {
+                    let mut param =
+                        chromiumoxide::cdp::browser_protocol::network::CookieParam::new(
+                            &c.name, &c.value,
+                        );
+                    param.domain = Some(c.domain.clone());
+                    param.path = Some(c.path.clone());
+                    param.secure = Some(c.secure);
+                    param.http_only = Some(c.http_only);
+                    if let Some(ref ss) = c.same_site {
+                        param.same_site = match ss.as_str() {
+                            "Strict" => Some(chromiumoxide::cdp::browser_protocol::network::CookieSameSite::Strict),
+                            "Lax" => Some(chromiumoxide::cdp::browser_protocol::network::CookieSameSite::Lax),
+                            "None" => Some(chromiumoxide::cdp::browser_protocol::network::CookieSameSite::None),
+                            _ => Option::None,
+                        };
+                    }
+                    if let Some(exp) = c.expires {
+                        param.expires = Some(chromiumoxide::cdp::browser_protocol::network::TimeSinceEpoch::new(exp));
+                    }
+                    param
+                })
+                .collect();
+
+        let count = cookie_params.len();
+        tab.page
+            .set_cookies(cookie_params)
+            .await
+            .context("Failed to set cookies via CDP")?;
 
         Ok(format!(
             "Auth profile '{}' restored: {} cookie(s) injected for domain '{}'. Reload the page to apply.",
-            params.profile, restored, profile.domain
+            params.profile, count, profile.domain
         ))
     }
 

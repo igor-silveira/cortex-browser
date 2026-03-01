@@ -81,11 +81,7 @@ fn compute_identity(node: &SemanticNode, depth: usize) -> String {
         format!("ref:{}", node.ref_id)
     } else {
         // Non-interactive: identity by role + truncated name + depth
-        let name_trunc = if node.name.len() > 30 {
-            &node.name[..30]
-        } else {
-            &node.name
-        };
+        let name_trunc: String = node.name.chars().take(30).collect();
         format!("{}:{}:{}", node.role, name_trunc, depth)
     }
 }
@@ -229,8 +225,9 @@ fn format_node_summary(node: &NodeSummary, output: &mut String) {
         output.push_str(&format!(" @e{}", node.ref_id));
     }
     if !node.name.is_empty() {
-        let display_name = if node.name.len() > 40 {
-            format!("{}...", &node.name[..37])
+        let display_name = if node.name.chars().count() > 40 {
+            let truncated: String = node.name.chars().take(37).collect();
+            format!("{truncated}...")
         } else {
             node.name.clone()
         };

@@ -1,8 +1,35 @@
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 
 use scraper::{ElementRef, Html, Node, Selector};
 use tracing::debug;
+
+/// Deterministic FNV-1a hasher. Unlike `DefaultHasher`, the output is guaranteed
+/// to be stable across Rust versions, which is essential for stable ref IDs.
+struct FnvHasher(u64);
+
+impl FnvHasher {
+    const BASIS: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x00000100000001B3;
+
+    fn new() -> Self {
+        Self(Self::BASIS)
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 ^= b as u64;
+            self.0 = self.0.wrapping_mul(Self::PRIME);
+        }
+    }
+
+    fn write_str(&mut self, s: &str) {
+        self.write_bytes(s.as_bytes());
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
 
 use crate::dom::{AriaRole, ElementLocator, PageSnapshot, ProcessResult, SemanticNode};
 
@@ -61,44 +88,54 @@ fn compute_stable_ref(
     path: &[usize],
     used_refs: &HashSet<u32>,
 ) -> u32 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut hasher = FnvHasher::new();
     let has_strong_identity =
         el.attr("id").is_some() || el.attr("name").is_some() || el.attr("href").is_some();
 
-    tag.hash(&mut hasher);
+    hasher.write_str(tag);
 
     if has_strong_identity {
         if let Some(id) = el.attr("id") {
-            "id:".hash(&mut hasher);
-            id.hash(&mut hasher);
+            hasher.write_str("id:");
+            hasher.write_str(id);
         }
         if let Some(n) = el.attr("name") {
-            "name:".hash(&mut hasher);
-            n.hash(&mut hasher);
+            hasher.write_str("name:");
+            hasher.write_str(n);
         }
         if let Some(href) = el.attr("href") {
-            "href:".hash(&mut hasher);
-            href.hash(&mut hasher);
+            hasher.write_str("href:");
+            hasher.write_str(href);
         }
         if let Some(t) = el.attr("type") {
-            t.hash(&mut hasher);
+            hasher.write_str(t);
         }
     } else {
         if let Some(t) = el.attr("type") {
-            t.hash(&mut hasher);
+            hasher.write_str(t);
         }
         if let Some(href) = el.attr("href") {
-            href.hash(&mut hasher);
+            hasher.write_str(href);
         }
-        name.hash(&mut hasher);
-        path.hash(&mut hasher);
+        hasher.write_str(name);
+        for &idx in path {
+            hasher.write_bytes(&idx.to_le_bytes());
+        }
     }
 
     let hash = hasher.finish();
-    let mut candidate = (hash % 90000 + 10000) as u32;
+    let range: u32 = 90000;
+    let mut candidate = (hash % range as u64 + 10000) as u32;
 
-    // Linear probe for collision resolution
+    // Linear probe for collision resolution, bounded to prevent infinite loop.
+    let mut probes: u32 = 0;
     while used_refs.contains(&candidate) {
+        probes += 1;
+        if probes >= range {
+            // Range is exhausted (90k interactive elements); fall back to an overflow range.
+            candidate = 100000 + probes;
+            break;
+        }
         candidate = if candidate >= 99999 {
             10000
         } else {
