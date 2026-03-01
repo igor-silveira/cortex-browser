@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod browser;
 pub mod diff;
 pub mod dom;
