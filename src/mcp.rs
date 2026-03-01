@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::dom::RefIndex;
-use crate::{browser, diff, extract, hints, mutation, pipeline, recording, serialize};
+use crate::{auth, browser, diff, extract, hints, mutation, pipeline, recording, serialize};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct NavigateParams {
@@ -169,6 +169,37 @@ pub struct ScreenshotParams {
     pub annotate: Option<bool>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct SaveAuthParams {
+    /// A short name for this auth profile (e.g., "github-login")
+    pub profile: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RestoreAuthParams {
+    /// The name of the auth profile to restore
+    pub profile: String,
+    /// Optional domain to narrow the search (e.g., "github-com")
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ListAuthParams {
+    /// Optional domain to filter by (e.g., "github-com")
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DeleteAuthParams {
+    /// The name of the auth profile to delete
+    pub profile: String,
+    /// Optional domain to narrow the search
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
 struct TabState {
     page: chromiumoxide::Page,
     ref_index: RefIndex,
@@ -230,6 +261,7 @@ pub struct CortexBrowserServer {
     tool_router: ToolRouter<Self>,
     state: Arc<RwLock<BrowserState>>,
     store: Arc<recording::RecordingStore>,
+    auth_store: Arc<auth::AuthStore>,
     launch_browser: bool,
     port: u16,
 }
@@ -241,6 +273,7 @@ impl CortexBrowserServer {
             tool_router: Self::tool_router(),
             state: Arc::new(RwLock::new(BrowserState::new())),
             store: Arc::new(recording::RecordingStore::new()),
+            auth_store: Arc::new(auth::AuthStore::new()),
             launch_browser,
             port,
         }
@@ -528,6 +561,51 @@ impl CortexBrowserServer {
         }
     }
 
+    #[tool(
+        description = "List cookies for the current page (name, domain, expiry). Useful for inspecting auth state before saving."
+    )]
+    async fn get_cookies(&self) -> String {
+        match self.do_get_cookies().await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Get cookies failed: {e}"),
+        }
+    }
+
+    #[tool(
+        description = "Save the current page's cookies to disk as a named auth profile. Use restore_auth to reload them later, even across browser restarts."
+    )]
+    async fn save_auth(&self, Parameters(params): Parameters<SaveAuthParams>) -> String {
+        match self.do_save_auth(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Save auth failed: {e}"),
+        }
+    }
+
+    #[tool(
+        description = "Restore a saved auth profile by injecting its cookies into the browser. Navigate to the target domain first, then call this to restore login state."
+    )]
+    async fn restore_auth(&self, Parameters(params): Parameters<RestoreAuthParams>) -> String {
+        match self.do_restore_auth(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Restore auth failed: {e}"),
+        }
+    }
+
+    #[tool(description = "List saved auth profiles, optionally filtered by domain.")]
+    async fn list_auth(&self, Parameters(params): Parameters<ListAuthParams>) -> String {
+        match self.do_list_auth(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: List auth failed: {e}"),
+        }
+    }
+
+    #[tool(description = "Delete a saved auth profile by name.")]
+    async fn delete_auth(&self, Parameters(params): Parameters<DeleteAuthParams>) -> String {
+        match self.do_delete_auth(params).await {
+            Ok(text) => text,
+            Err(e) => format!("ERROR: Delete auth failed: {e}"),
+        }
+    }
 }
 
 #[tool_handler]
@@ -549,7 +627,9 @@ impl ServerHandler for CortexBrowserServer {
                  Use 'extract' with a JSON Schema to pull structured data (tables, lists, objects) from the page as JSON. \
                  Use 'start_recording' / 'stop_recording' to capture action sequences, then 'replay_recording' to replay them deterministically without LLM decisions. \
                  Use 'list_recordings' and 'delete_recording' to manage saved recordings. \
-                 Use 'screenshot' to capture a PNG of the current page, with optional full_page and annotate flags for visual debugging."
+                 Use 'screenshot' to capture a PNG of the current page, with optional full_page and annotate flags for visual debugging. \
+                 Use 'get_cookies' to inspect auth state, 'save_auth' / 'restore_auth' to persist and reload login sessions across browser restarts, \
+                 'list_auth' and 'delete_auth' to manage saved auth profiles."
                     .into(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
@@ -1532,6 +1612,165 @@ impl CortexBrowserServer {
         ]))
     }
 
+    async fn do_get_cookies(&self) -> anyhow::Result<String> {
+        debug!("get_cookies");
+        let state = self.state.read().await;
+        let tab = state.active_tab()?;
+
+        let js = "(function() { \
+            return JSON.stringify(document.cookie.split('; ').filter(Boolean).map(function(c) { \
+                var parts = c.split('='); \
+                return { name: parts[0], value: parts.slice(1).join('=') }; \
+            })); \
+        })()";
+
+        let cookies_json = tab
+            .page
+            .evaluate(js)
+            .await
+            .ok()
+            .and_then(|v| v.into_value::<String>().ok())
+            .unwrap_or_else(|| "[]".into());
+
+        #[derive(Deserialize)]
+        struct SimpleCookie {
+            name: String,
+            value: String,
+        }
+
+        let cookies: Vec<SimpleCookie> = serde_json::from_str(&cookies_json).unwrap_or_default();
+
+        if cookies.is_empty() {
+            return Ok("No cookies found for the current page.".into());
+        }
+
+        let lines: Vec<String> = cookies
+            .iter()
+            .map(|c| {
+                let val_preview = if c.value.len() > 40 {
+                    format!("{}...", &c.value[..40])
+                } else {
+                    c.value.clone()
+                };
+                format!("  {} = {}", c.name, val_preview)
+            })
+            .collect();
+
+        Ok(format!(
+            "Cookies ({}):\n{}",
+            cookies.len(),
+            lines.join("\n")
+        ))
+    }
+
+    async fn do_save_auth(&self, params: SaveAuthParams) -> anyhow::Result<String> {
+        info!(profile = %params.profile, "save_auth");
+        let state = self.state.read().await;
+        let tab = state.active_tab()?;
+
+        let js = "(function() { \
+            return JSON.stringify(document.cookie.split('; ').filter(Boolean).map(function(c) { \
+                var parts = c.split('='); \
+                return { name: parts[0], value: parts.slice(1).join('='), domain: location.hostname, path: '/' }; \
+            })); \
+        })()";
+
+        let cookies_json = tab
+            .page
+            .evaluate(js)
+            .await
+            .ok()
+            .and_then(|v| v.into_value::<String>().ok())
+            .unwrap_or_else(|| "[]".into());
+
+        #[derive(Deserialize)]
+        struct RawCookie {
+            name: String,
+            value: String,
+            domain: String,
+            path: String,
+        }
+
+        let raw_cookies: Vec<RawCookie> = serde_json::from_str(&cookies_json).unwrap_or_default();
+
+        let stored: Vec<auth::StoredCookie> = raw_cookies
+            .into_iter()
+            .map(|c| auth::StoredCookie {
+                name: c.name,
+                value: c.value,
+                domain: c.domain,
+                path: c.path,
+                expires: None,
+                http_only: false,
+                secure: false,
+                same_site: None,
+            })
+            .collect();
+
+        let url = &tab.current_url;
+        let cookie_count = stored.len();
+        let path = self.auth_store.save(url, &params.profile, stored)?;
+
+        Ok(format!(
+            "Auth profile '{}' saved with {} cookie(s) to {}",
+            params.profile,
+            cookie_count,
+            path.display()
+        ))
+    }
+
+    async fn do_restore_auth(&self, params: RestoreAuthParams) -> anyhow::Result<String> {
+        info!(profile = %params.profile, "restore_auth");
+        let profile = self
+            .auth_store
+            .load(&params.profile, params.domain.as_deref())?;
+
+        let state = self.state.read().await;
+        let tab = state.active_tab()?;
+
+        let mut restored = 0;
+        for cookie in &profile.cookies {
+            let js = format!(
+                "document.cookie = '{}={}; path={}; domain={}'",
+                cookie.name.replace('\'', "\\'"),
+                cookie.value.replace('\'', "\\'"),
+                cookie.path,
+                cookie.domain,
+            );
+            tab.page.evaluate(js).await.ok();
+            restored += 1;
+        }
+
+        Ok(format!(
+            "Auth profile '{}' restored: {} cookie(s) injected for domain '{}'. Reload the page to apply.",
+            params.profile, restored, profile.domain
+        ))
+    }
+
+    async fn do_list_auth(&self, params: ListAuthParams) -> anyhow::Result<String> {
+        let summaries = self.auth_store.list(params.domain.as_deref())?;
+        if summaries.is_empty() {
+            return Ok("No auth profiles found.".into());
+        }
+
+        let lines: Vec<String> = summaries
+            .iter()
+            .map(|s| {
+                format!(
+                    "  {} [{}] ({} cookies)",
+                    s.profile, s.domain, s.cookie_count
+                )
+            })
+            .collect();
+
+        Ok(format!("Auth profiles:\n{}", lines.join("\n")))
+    }
+
+    async fn do_delete_auth(&self, params: DeleteAuthParams) -> anyhow::Result<String> {
+        self.auth_store
+            .delete(&params.profile, params.domain.as_deref())?;
+        Ok(format!("Auth profile '{}' deleted.", params.profile))
+    }
 }
 
 pub async fn run_mcp_server(launch: bool, port: u16) -> anyhow::Result<()> {

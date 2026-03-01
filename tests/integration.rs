@@ -1,3 +1,4 @@
+use cortex_browser::auth;
 use cortex_browser::dom::{AriaRole, ElementLocator, PageSnapshot, SemanticNode};
 use cortex_browser::extract;
 use cortex_browser::hints::{self, TaskContext};
@@ -27,10 +28,7 @@ fn snap_refs(html: &str) -> cortex_browser::dom::ProcessResult {
 
 /// Count total nodes recursively.
 fn count_nodes(nodes: &[SemanticNode]) -> usize {
-    nodes
-        .iter()
-        .map(|n| 1 + count_nodes(&n.children))
-        .sum()
+    nodes.iter().map(|n| 1 + count_nodes(&n.children)).sum()
 }
 
 /// Collect all ref_ids > 0 from the tree.
@@ -48,7 +46,11 @@ fn collect_refs(nodes: &[SemanticNode]) -> Vec<u32> {
 /// Check if a node with the given role and name-substring exists anywhere in the tree.
 fn has_node(nodes: &[SemanticNode], role: &AriaRole, name_contains: &str) -> bool {
     for n in nodes {
-        if n.role == *role && n.name.to_lowercase().contains(&name_contains.to_lowercase()) {
+        if n.role == *role
+            && n.name
+                .to_lowercase()
+                .contains(&name_contains.to_lowercase())
+        {
             return true;
         }
         if has_node(&n.children, role, name_contains) {
@@ -65,7 +67,11 @@ fn find_node<'a>(
     name_contains: &str,
 ) -> Option<&'a SemanticNode> {
     for n in nodes {
-        if n.role == *role && n.name.to_lowercase().contains(&name_contains.to_lowercase()) {
+        if n.role == *role
+            && n.name
+                .to_lowercase()
+                .contains(&name_contains.to_lowercase())
+        {
             return Some(n);
         }
         if let Some(found) = find_node(&n.children, role, name_contains) {
@@ -102,10 +108,7 @@ fn scripts_and_styles_are_pruned() {
         !text.contains("__NEXT_DATA__"),
         "inline script content should be pruned"
     );
-    assert!(
-        !text.contains("sr-only"),
-        "style rules should be pruned"
-    );
+    assert!(!text.contains("sr-only"), "style rules should be pruned");
     assert!(
         !text.contains("@keyframes"),
         "CSS keyframes should be pruned"
@@ -404,7 +407,8 @@ fn images_with_alt_text_are_kept() {
 
 #[test]
 fn images_without_alt_are_dropped() {
-    let html = r#"<img src="decoration.png" alt=""><img src="important.png" alt="Important diagram">"#;
+    let html =
+        r#"<img src="decoration.png" alt=""><img src="important.png" alt="Important diagram">"#;
     let snapshot = snap(html);
     assert!(
         has_node(&snapshot.nodes, &AriaRole::Img, "Important diagram"),
@@ -627,18 +631,9 @@ fn dashboard_table_rows_are_merged() {
 #[test]
 fn header_shows_title_and_url() {
     let text = snap_text(ECOMMERCE);
-    assert!(
-        text.starts_with("page: "),
-        "should start with page: header"
-    );
-    assert!(
-        text.contains("ShopNow"),
-        "should contain page title"
-    );
-    assert!(
-        text.contains("[https://example.com]"),
-        "should contain URL"
-    );
+    assert!(text.starts_with("page: "), "should start with page: header");
+    assert!(text.contains("ShopNow"), "should contain page title");
+    assert!(text.contains("[https://example.com]"), "should contain URL");
     assert!(text.contains("---\n"), "should have separator line");
 }
 
@@ -655,10 +650,7 @@ fn interactive_elements_have_ref_markers() {
 #[test]
 fn href_is_shown_for_links() {
     let text = snap_text(ECOMMERCE);
-    assert!(
-        text.contains("-> /products"),
-        "links should show href"
-    );
+    assert!(text.contains("-> /products"), "links should show href");
 }
 
 #[test]
@@ -975,12 +967,28 @@ fn stable_refs_survive_content_addition() {
     let r2 = snap_refs(html_after);
 
     // Elements with strong identity (id, href) should keep the same ref
-    let btn1 = r1.ref_index.iter().find(|(_, l)| l.id.as_deref() == Some("submit-btn")).map(|(id, _)| *id);
-    let btn2 = r2.ref_index.iter().find(|(_, l)| l.id.as_deref() == Some("submit-btn")).map(|(id, _)| *id);
+    let btn1 = r1
+        .ref_index
+        .iter()
+        .find(|(_, l)| l.id.as_deref() == Some("submit-btn"))
+        .map(|(id, _)| *id);
+    let btn2 = r2
+        .ref_index
+        .iter()
+        .find(|(_, l)| l.id.as_deref() == Some("submit-btn"))
+        .map(|(id, _)| *id);
     assert_eq!(btn1, btn2, "button with id should keep same ref");
 
-    let link1 = r1.ref_index.iter().find(|(_, l)| l.href.as_deref() == Some("/home")).map(|(id, _)| *id);
-    let link2 = r2.ref_index.iter().find(|(_, l)| l.href.as_deref() == Some("/home")).map(|(id, _)| *id);
+    let link1 = r1
+        .ref_index
+        .iter()
+        .find(|(_, l)| l.href.as_deref() == Some("/home"))
+        .map(|(id, _)| *id);
+    let link2 = r2
+        .ref_index
+        .iter()
+        .find(|(_, l)| l.href.as_deref() == Some("/home"))
+        .map(|(id, _)| *id);
     assert_eq!(link1, link2, "link with href should keep same ref");
 }
 
@@ -1110,7 +1118,10 @@ fn extract_table_from_dashboard() {
 
     // Check the first row has expected fields
     let first = &arr[0];
-    assert!(first.get("customer").is_some(), "should have customer field");
+    assert!(
+        first.get("customer").is_some(),
+        "should have customer field"
+    );
     assert!(first.get("product").is_some(), "should have product field");
     assert!(first.get("status").is_some(), "should have status field");
     assert!(first.get("total").is_some(), "should have total field");
@@ -1151,7 +1162,10 @@ fn extract_list_items_from_ecommerce() {
     });
 
     let result = extract::extract_with_schema(&snapshot, &schema, Some("[role=list]"));
-    assert!(result.is_array(), "should return an array for list extraction");
+    assert!(
+        result.is_array(),
+        "should return an array for list extraction"
+    );
     let arr = result.as_array().unwrap();
     // The ecommerce page has product cards in a list
     assert!(
@@ -1266,7 +1280,10 @@ fn extract_no_matches_returns_empty_array() {
     let result = extract::extract_with_schema(&snapshot, &schema, None);
     assert!(result.is_array(), "should return an array");
     let arr = result.as_array().unwrap();
-    assert!(arr.is_empty(), "should be empty when no tables or lists match");
+    assert!(
+        arr.is_empty(),
+        "should be empty when no tables or lists match"
+    );
 }
 
 #[test]
@@ -1410,12 +1427,21 @@ fn recording_serialization_round_trip() {
     assert_eq!(deserialized.name, "login-flow");
     assert_eq!(deserialized.domain, "example-com");
     assert_eq!(deserialized.actions.len(), 3);
-    assert!(matches!(deserialized.actions[0], recording::RecordedAction::Navigate { .. }));
-    assert!(matches!(deserialized.actions[1], recording::RecordedAction::TypeText { .. }));
+    assert!(matches!(
+        deserialized.actions[0],
+        recording::RecordedAction::Navigate { .. }
+    ));
+    assert!(matches!(
+        deserialized.actions[1],
+        recording::RecordedAction::TypeText { .. }
+    ));
     if let recording::RecordedAction::TypeText { ref text, .. } = deserialized.actions[1] {
         assert_eq!(text, "admin");
     }
-    assert!(matches!(deserialized.actions[2], recording::RecordedAction::Click { .. }));
+    assert!(matches!(
+        deserialized.actions[2],
+        recording::RecordedAction::Click { .. }
+    ));
 }
 
 #[test]
@@ -1439,9 +1465,18 @@ fn element_locator_serde_preserves_js_expression() {
 
 #[test]
 fn domain_extraction() {
-    assert_eq!(recording::extract_domain("https://github.com/foo/bar"), "github-com");
-    assert_eq!(recording::extract_domain("http://localhost:3000/app"), "localhost");
-    assert_eq!(recording::extract_domain("https://sub.example.co.uk/path"), "sub-example-co-uk");
+    assert_eq!(
+        recording::extract_domain("https://github.com/foo/bar"),
+        "github-com"
+    );
+    assert_eq!(
+        recording::extract_domain("http://localhost:3000/app"),
+        "localhost"
+    );
+    assert_eq!(
+        recording::extract_domain("https://sub.example.co.uk/path"),
+        "sub-example-co-uk"
+    );
     assert_eq!(recording::extract_domain("example.com"), "example-com");
 }
 
@@ -1449,7 +1484,10 @@ fn domain_extraction() {
 fn filename_sanitization() {
     assert_eq!(recording::sanitize_filename("login-flow"), "login-flow");
     assert_eq!(recording::sanitize_filename("my flow!@#"), "my-flow");
-    assert_eq!(recording::sanitize_filename("test_recording_1"), "test_recording_1");
+    assert_eq!(
+        recording::sanitize_filename("test_recording_1"),
+        "test_recording_1"
+    );
     assert_eq!(recording::sanitize_filename("---"), "recording");
     assert_eq!(recording::sanitize_filename(""), "recording");
 }
@@ -1538,19 +1576,17 @@ fn recording_summary_from_recording() {
         start_url: "https://test.com".into(),
         created_at: "1700000000".into(),
         description: Some("desc".into()),
-        actions: vec![
-            recording::RecordedAction::Click {
-                locator: ElementLocator {
-                    tag: "button".into(),
-                    id: Some("btn".into()),
-                    name: None,
-                    input_type: None,
-                    href: None,
-                    text: "Go".into(),
-                },
-                ref_id: 1,
+        actions: vec![recording::RecordedAction::Click {
+            locator: ElementLocator {
+                tag: "button".into(),
+                id: Some("btn".into()),
+                name: None,
+                input_type: None,
+                href: None,
+                text: "Go".into(),
             },
-        ],
+            ref_id: 1,
+        }],
     };
 
     let summary = recording::RecordingSummary::from(&rec);
@@ -1592,4 +1628,179 @@ fn recording_multiple_domains() {
     let alpha_only = store.list(Some("alpha-com")).unwrap();
     assert_eq!(alpha_only.len(), 1);
     assert_eq!(alpha_only[0].name, "flow-a");
+}
+
+// ── Auth Store Tests ────────────────────────────────────────────────────────
+
+#[test]
+fn auth_store_save_load_list_delete() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = auth::AuthStore::with_base(tmp.path().to_path_buf());
+
+    let cookies = vec![
+        auth::StoredCookie {
+            name: "session".into(),
+            value: "abc123".into(),
+            domain: "example.com".into(),
+            path: "/".into(),
+            expires: Some(1700000000.0),
+            http_only: true,
+            secure: true,
+            same_site: Some("Lax".into()),
+        },
+        auth::StoredCookie {
+            name: "theme".into(),
+            value: "dark".into(),
+            domain: "example.com".into(),
+            path: "/".into(),
+            expires: None,
+            http_only: false,
+            secure: false,
+            same_site: None,
+        },
+    ];
+
+    let path = store
+        .save("https://example.com/app", "my-session", cookies)
+        .unwrap();
+    assert!(path.exists());
+
+    let loaded = store.load("my-session", Some("example-com")).unwrap();
+    assert_eq!(loaded.profile, "my-session");
+    assert_eq!(loaded.domain, "example-com");
+    assert_eq!(loaded.url, "https://example.com/app");
+    assert_eq!(loaded.cookies.len(), 2);
+    assert_eq!(loaded.cookies[0].name, "session");
+    assert_eq!(loaded.cookies[0].value, "abc123");
+    assert!(loaded.cookies[0].http_only);
+    assert_eq!(loaded.cookies[1].name, "theme");
+
+    let loaded2 = store.load("my-session", None).unwrap();
+    assert_eq!(loaded2.profile, "my-session");
+
+    let summaries = store.list(None).unwrap();
+    assert_eq!(summaries.len(), 1);
+    assert_eq!(summaries[0].profile, "my-session");
+    assert_eq!(summaries[0].cookie_count, 2);
+
+    let summaries_dom = store.list(Some("example-com")).unwrap();
+    assert_eq!(summaries_dom.len(), 1);
+
+    let summaries_none = store.list(Some("other-com")).unwrap();
+    assert!(summaries_none.is_empty());
+
+    store.delete("my-session", Some("example-com")).unwrap();
+    assert!(store.load("my-session", None).is_err());
+}
+
+#[test]
+fn auth_store_serialization_round_trip() {
+    let cookie = auth::StoredCookie {
+        name: "token".into(),
+        value: "xyz".into(),
+        domain: ".github.com".into(),
+        path: "/".into(),
+        expires: Some(9999999999.0),
+        http_only: true,
+        secure: true,
+        same_site: Some("None".into()),
+    };
+
+    let profile = auth::AuthProfile {
+        profile: "gh-login".into(),
+        domain: "github-com".into(),
+        url: "https://github.com".into(),
+        saved_at: "1700000000".into(),
+        cookies: vec![cookie],
+    };
+
+    let json = serde_json::to_string_pretty(&profile).unwrap();
+    let deserialized: auth::AuthProfile = serde_json::from_str(&json).unwrap();
+
+    assert_eq!(deserialized.profile, "gh-login");
+    assert_eq!(deserialized.domain, "github-com");
+    assert_eq!(deserialized.cookies.len(), 1);
+    assert_eq!(deserialized.cookies[0].name, "token");
+    assert_eq!(deserialized.cookies[0].same_site.as_deref(), Some("None"));
+    assert!(deserialized.cookies[0].secure);
+}
+
+#[test]
+fn auth_store_load_not_found() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = auth::AuthStore::with_base(tmp.path().to_path_buf());
+    assert!(store.load("nonexistent", None).is_err());
+}
+
+#[test]
+fn auth_store_multiple_domains() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = auth::AuthStore::with_base(tmp.path().to_path_buf());
+
+    store
+        .save(
+            "https://alpha.com",
+            "alpha-session",
+            vec![auth::StoredCookie {
+                name: "a".into(),
+                value: "1".into(),
+                domain: "alpha.com".into(),
+                path: "/".into(),
+                expires: None,
+                http_only: false,
+                secure: false,
+                same_site: None,
+            }],
+        )
+        .unwrap();
+
+    store
+        .save(
+            "https://beta.com",
+            "beta-session",
+            vec![auth::StoredCookie {
+                name: "b".into(),
+                value: "2".into(),
+                domain: "beta.com".into(),
+                path: "/".into(),
+                expires: None,
+                http_only: false,
+                secure: false,
+                same_site: None,
+            }],
+        )
+        .unwrap();
+
+    let all = store.list(None).unwrap();
+    assert_eq!(all.len(), 2);
+
+    let alpha_only = store.list(Some("alpha-com")).unwrap();
+    assert_eq!(alpha_only.len(), 1);
+    assert_eq!(alpha_only[0].profile, "alpha-session");
+}
+
+#[test]
+fn auth_summary_from_profile() {
+    let profile = auth::AuthProfile {
+        profile: "test-prof".into(),
+        domain: "test-com".into(),
+        url: "https://test.com".into(),
+        saved_at: "1700000000".into(),
+        cookies: vec![auth::StoredCookie {
+            name: "a".into(),
+            value: "1".into(),
+            domain: "test.com".into(),
+            path: "/".into(),
+            expires: None,
+            http_only: false,
+            secure: false,
+            same_site: None,
+        }],
+    };
+
+    let summary = auth::AuthSummary::from(&profile);
+    assert_eq!(summary.profile, "test-prof");
+    assert_eq!(summary.domain, "test-com");
+    assert_eq!(summary.saved_at, "1700000000");
+    assert_eq!(summary.cookie_count, 1);
 }
