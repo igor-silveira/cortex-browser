@@ -43,7 +43,11 @@ Interactive elements get `@eN` refs. The agent clicks by ref (`click @e61466`), 
 - **Viewport-aware snapshots**: Shows scroll position, marks off-screen elements `[offscreen]`, supports scroll_down/scroll_up/scroll_to_ref.
 - **Page diff**: After actions, get a compact diff instead of a full re-snapshot (`return_diff: true` or standalone `page_diff` tool).
 - **Task context filtering**: Focus snapshots on relevant regions (e.g., only form elements matching "login").
-- **MCP server**: Runs as a Model Context Protocol server over stdio for agent integration.
+- **Screenshot + annotations**: Capture PNG screenshots of the current page. Optionally overlay interactive elements with red borders and `@eN` labels for visual debugging. Supports viewport and full-page modes.
+- **Auth state persistence**: Save and restore browser cookies as named profiles. Login sessions survive browser restarts — save once, restore anywhere.
+- **Structured data extraction**: Pull tables, lists, and objects from pages as JSON using a JSON Schema — no LLM needed.
+- **Action recording & replay**: Record browser action sequences and replay them deterministically using stored element locators.
+- **MCP server**: Runs as a Model Context Protocol server over stdio or HTTP for agent integration.
 - **Incremental re-snapshots**: DOM mutation observer skips re-processing when nothing changed.
 
 ## Getting Started
@@ -246,6 +250,38 @@ Setting `return_diff: true` on any interaction returns a compact diff instead of
 | `focused_snapshot` | One-time filtered snapshot without changing persistent context |
 | `wait_for_changes` | Block until the DOM changes (useful after async actions) |
 
+**Screenshot:**
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `screenshot` | `full_page?`, `annotate?` | Capture a PNG screenshot. `annotate` overlays `@eN` labels on interactive elements |
+
+**Auth state persistence:**
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_cookies` | | List cookies for the current page |
+| `save_auth` | `profile` | Save current cookies to disk as a named profile |
+| `restore_auth` | `profile`, `domain?` | Inject saved cookies back into the browser |
+| `list_auth` | `domain?` | List saved auth profiles |
+| `delete_auth` | `profile`, `domain?` | Delete a saved profile |
+
+**Structured data extraction:**
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `extract` | `schema`, `selector?` | Extract structured JSON from the page using a JSON Schema |
+
+**Recording & replay:**
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `start_recording` | `name`, `description?` | Start capturing browser actions |
+| `stop_recording` | | Stop and save the recording to disk |
+| `replay_recording` | `name`, `domain?` | Replay a saved recording deterministically |
+| `list_recordings` | `domain?` | List saved recordings |
+| `delete_recording` | `name`, `domain?` | Delete a saved recording |
+
 ### Example agent workflow
 
 A typical agent session looks like this:
@@ -362,8 +398,11 @@ src/
   dom.rs         Semantic tree types (PageSnapshot, SemanticNode, AriaRole)
   serialize.rs   Compact text serialization for LLM consumption
   diff.rs        Page diff algorithm (added/removed/modified)
+  extract.rs     Schema-based structured data extraction
   hints.rs       Task context filtering and relevance scoring
   mutation.rs    DOM mutation observer + viewport JS
+  recording.rs   Action recording types and RecordingStore
+  auth.rs        Cookie persistence types and AuthStore
   mcp.rs         MCP server with multi-tab state management
   browser.rs     Chrome CDP connection and page fetching
 tests/
