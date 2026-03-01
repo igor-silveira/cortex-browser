@@ -1,6 +1,6 @@
 [package]
 name = "cortex-browser"
-version = "0.1.0"
+version = "1.0.1"
 edition = "2021"
 description = "Compact browser perception layer for AI agents - converts web pages into token-efficient semantic snapshots"
 license = "MIT"
