@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Context as _;
+use base64::Engine as _;
 use chromiumoxide::Browser;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, Content, ServerCapabilities, ServerInfo};
 use rmcp::{tool, tool_handler, tool_router, ServerHandler, ServiceExt};
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -158,6 +159,16 @@ pub struct DeleteRecordingParams {
     pub domain: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct ScreenshotParams {
+    /// If true, capture the entire scrollable page instead of just the viewport (default: false)
+    #[serde(default)]
+    pub full_page: Option<bool>,
+    /// If true, overlay interactive elements with red borders and @eN labels (default: false)
+    #[serde(default)]
+    pub annotate: Option<bool>,
+}
+
 struct TabState {
     page: chromiumoxide::Page,
     ref_index: RefIndex,
@@ -235,18 +246,19 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Navigate to a URL and return a compact page snapshot. Interactive elements are labeled @eN - use these refs with click, type_text, select_option.")]
-    async fn navigate(
-        &self,
-        Parameters(params): Parameters<NavigateParams>,
-    ) -> String {
+    #[tool(
+        description = "Navigate to a URL and return a compact page snapshot. Interactive elements are labeled @eN - use these refs with click, type_text, select_option."
+    )]
+    async fn navigate(&self, Parameters(params): Parameters<NavigateParams>) -> String {
         match self.do_navigate(&params.url).await {
             Ok(text) => text,
             Err(e) => format!("ERROR: Navigation failed: {e}"),
         }
     }
 
-    #[tool(description = "Return a snapshot of the current page without navigating. Uses a cached version if the DOM hasn't changed since the last snapshot.")]
+    #[tool(
+        description = "Return a snapshot of the current page without navigating. Uses a cached version if the DOM hasn't changed since the last snapshot."
+    )]
     async fn snapshot(&self) -> String {
         match self.do_snapshot().await {
             Ok(text) => text,
@@ -254,51 +266,72 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Click an element by ref ID (the N from @eN in the snapshot). Returns updated page snapshot, or a compact diff if return_diff is true.")]
-    async fn click(
-        &self,
-        Parameters(params): Parameters<ClickParams>,
-    ) -> String {
-        match self.do_click(params.r#ref, params.return_diff.unwrap_or(false)).await {
+    #[tool(
+        description = "Click an element by ref ID (the N from @eN in the snapshot). Returns updated page snapshot, or a compact diff if return_diff is true."
+    )]
+    async fn click(&self, Parameters(params): Parameters<ClickParams>) -> String {
+        match self
+            .do_click(params.r#ref, params.return_diff.unwrap_or(false))
+            .await
+        {
             Ok(text) => text,
             Err(e) => format!("ERROR: Click @e{} failed: {e}", params.r#ref),
         }
     }
 
-    #[tool(description = "Type text into an input field by ref ID (the N from @eN). Returns updated page snapshot, or a compact diff if return_diff is true.")]
-    async fn type_text(
-        &self,
-        Parameters(params): Parameters<TypeTextParams>,
-    ) -> String {
-        match self.do_type_text(params.r#ref, &params.text, params.return_diff.unwrap_or(false)).await {
+    #[tool(
+        description = "Type text into an input field by ref ID (the N from @eN). Returns updated page snapshot, or a compact diff if return_diff is true."
+    )]
+    async fn type_text(&self, Parameters(params): Parameters<TypeTextParams>) -> String {
+        match self
+            .do_type_text(
+                params.r#ref,
+                &params.text,
+                params.return_diff.unwrap_or(false),
+            )
+            .await
+        {
             Ok(text) => text,
             Err(e) => format!("ERROR: Type into @e{} failed: {e}", params.r#ref),
         }
     }
 
-    #[tool(description = "Select an option in a dropdown by ref ID (the N from @eN). Returns updated page snapshot, or a compact diff if return_diff is true.")]
-    async fn select_option(
-        &self,
-        Parameters(params): Parameters<SelectOptionParams>,
-    ) -> String {
-        match self.do_select(params.r#ref, &params.value, params.return_diff.unwrap_or(false)).await {
+    #[tool(
+        description = "Select an option in a dropdown by ref ID (the N from @eN). Returns updated page snapshot, or a compact diff if return_diff is true."
+    )]
+    async fn select_option(&self, Parameters(params): Parameters<SelectOptionParams>) -> String {
+        match self
+            .do_select(
+                params.r#ref,
+                &params.value,
+                params.return_diff.unwrap_or(false),
+            )
+            .await
+        {
             Ok(text) => text,
             Err(e) => format!("ERROR: Select in @e{} failed: {e}", params.r#ref),
         }
     }
 
-    #[tool(description = "Wait for the page DOM to change (e.g., after an async update or SPA transition), then return a fresh snapshot. Useful when a previous action triggers deferred updates.")]
+    #[tool(
+        description = "Wait for the page DOM to change (e.g., after an async update or SPA transition), then return a fresh snapshot. Useful when a previous action triggers deferred updates."
+    )]
     async fn wait_for_changes(
         &self,
         Parameters(params): Parameters<WaitForChangesParams>,
     ) -> String {
-        match self.do_wait_for_changes(params.timeout_ms.unwrap_or(5000)).await {
+        match self
+            .do_wait_for_changes(params.timeout_ms.unwrap_or(5000))
+            .await
+        {
             Ok(text) => text,
             Err(e) => format!("ERROR: Wait failed: {e}"),
         }
     }
 
-    #[tool(description = "Set task context to focus subsequent snapshots on relevant page regions. Reduces snapshot size by filtering out content unrelated to the current task. The context persists until cleared.")]
+    #[tool(
+        description = "Set task context to focus subsequent snapshots on relevant page regions. Reduces snapshot size by filtering out content unrelated to the current task. The context persists until cleared."
+    )]
     async fn set_task_context(
         &self,
         Parameters(params): Parameters<SetTaskContextParams>,
@@ -309,7 +342,9 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Clear the current task context. Subsequent snapshots will show the full unfiltered page.")]
+    #[tool(
+        description = "Clear the current task context. Subsequent snapshots will show the full unfiltered page."
+    )]
     async fn clear_task_context(&self) -> String {
         let mut state = self.state.write().await;
         if let Ok(tab) = state.active_tab_mut() {
@@ -319,7 +354,9 @@ impl CortexBrowserServer {
         "Task context cleared. Snapshots will now show the full page.".into()
     }
 
-    #[tool(description = "Get a one-time focused snapshot filtered by the given criteria, without changing the persistent task context. Useful for quick targeted queries like 'show me only the form elements'.")]
+    #[tool(
+        description = "Get a one-time focused snapshot filtered by the given criteria, without changing the persistent task context. Useful for quick targeted queries like 'show me only the form elements'."
+    )]
     async fn focused_snapshot(
         &self,
         Parameters(params): Parameters<FocusedSnapshotParams>,
@@ -330,18 +367,19 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Open a new tab and navigate to the given URL. Returns the new tab's ID and page snapshot.")]
-    async fn open_tab(
-        &self,
-        Parameters(params): Parameters<OpenTabParams>,
-    ) -> String {
+    #[tool(
+        description = "Open a new tab and navigate to the given URL. Returns the new tab's ID and page snapshot."
+    )]
+    async fn open_tab(&self, Parameters(params): Parameters<OpenTabParams>) -> String {
         match self.do_open_tab(&params.url).await {
             Ok(text) => text,
             Err(e) => format!("ERROR: Open tab failed: {e}"),
         }
     }
 
-    #[tool(description = "List all open tabs with their IDs, titles, and URLs. The active tab is marked.")]
+    #[tool(
+        description = "List all open tabs with their IDs, titles, and URLs. The active tab is marked."
+    )]
     async fn list_tabs(&self) -> String {
         match self.do_list_tabs().await {
             Ok(text) => text,
@@ -350,28 +388,26 @@ impl CortexBrowserServer {
     }
 
     #[tool(description = "Switch to a different tab by ID. Returns that tab's current snapshot.")]
-    async fn switch_tab(
-        &self,
-        Parameters(params): Parameters<SwitchTabParams>,
-    ) -> String {
+    async fn switch_tab(&self, Parameters(params): Parameters<SwitchTabParams>) -> String {
         match self.do_switch_tab(params.tab_id).await {
             Ok(text) => text,
             Err(e) => format!("ERROR: Switch tab failed: {e}"),
         }
     }
 
-    #[tool(description = "Close a tab by ID. If the closed tab was active, switches to another open tab.")]
-    async fn close_tab(
-        &self,
-        Parameters(params): Parameters<CloseTabParams>,
-    ) -> String {
+    #[tool(
+        description = "Close a tab by ID. If the closed tab was active, switches to another open tab."
+    )]
+    async fn close_tab(&self, Parameters(params): Parameters<CloseTabParams>) -> String {
         match self.do_close_tab(params.tab_id).await {
             Ok(text) => text,
             Err(e) => format!("ERROR: Close tab failed: {e}"),
         }
     }
 
-    #[tool(description = "Scroll down by roughly one viewport height. Returns an updated snapshot with viewport position.")]
+    #[tool(
+        description = "Scroll down by roughly one viewport height. Returns an updated snapshot with viewport position."
+    )]
     async fn scroll_down(&self) -> String {
         match self.do_scroll(mutation::SCROLL_DOWN_JS).await {
             Ok(text) => text,
@@ -379,7 +415,9 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Scroll up by roughly one viewport height. Returns an updated snapshot with viewport position.")]
+    #[tool(
+        description = "Scroll up by roughly one viewport height. Returns an updated snapshot with viewport position."
+    )]
     async fn scroll_up(&self) -> String {
         match self.do_scroll(mutation::SCROLL_UP_JS).await {
             Ok(text) => text,
@@ -387,18 +425,19 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Scroll a specific element into view by ref ID (the N from @eN). Returns an updated snapshot.")]
-    async fn scroll_to_ref(
-        &self,
-        Parameters(params): Parameters<ScrollToRefParams>,
-    ) -> String {
+    #[tool(
+        description = "Scroll a specific element into view by ref ID (the N from @eN). Returns an updated snapshot."
+    )]
+    async fn scroll_to_ref(&self, Parameters(params): Parameters<ScrollToRefParams>) -> String {
         match self.do_scroll_to_ref(params.r#ref).await {
             Ok(text) => text,
             Err(e) => format!("ERROR: Scroll to @e{} failed: {e}", params.r#ref),
         }
     }
 
-    #[tool(description = "Compare the current page to its previous snapshot and return a compact diff showing what changed. Useful after actions to see only what's different without a full snapshot.")]
+    #[tool(
+        description = "Compare the current page to its previous snapshot and return a compact diff showing what changed. Useful after actions to see only what's different without a full snapshot."
+    )]
     async fn page_diff(&self) -> String {
         match self.do_page_diff().await {
             Ok(text) => text,
@@ -406,18 +445,19 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Extract structured data from the current page as JSON, using a JSON Schema to describe the desired output shape. Deterministic extraction from the semantic tree - no LLM needed. Supports table extraction (maps column headers to schema properties), list extraction (repeated items), and single-object extraction (labeled values). Use 'selector' to scope to a page region (e.g., \"table\", \"[role=list]\").")]
-    async fn extract(
-        &self,
-        Parameters(params): Parameters<ExtractParams>,
-    ) -> String {
+    #[tool(
+        description = "Extract structured data from the current page as JSON, using a JSON Schema to describe the desired output shape. Deterministic extraction from the semantic tree - no LLM needed. Supports table extraction (maps column headers to schema properties), list extraction (repeated items), and single-object extraction (labeled values). Use 'selector' to scope to a page region (e.g., \"table\", \"[role=list]\")."
+    )]
+    async fn extract(&self, Parameters(params): Parameters<ExtractParams>) -> String {
         match self.do_extract(params).await {
             Ok(text) => text,
             Err(e) => format!("ERROR: Extract failed: {e}"),
         }
     }
 
-    #[tool(description = "Start recording browser actions for the current domain. Actions (navigate, click, type, select) will be captured until stop_recording is called. Only one recording can be active at a time.")]
+    #[tool(
+        description = "Start recording browser actions for the current domain. Actions (navigate, click, type, select) will be captured until stop_recording is called. Only one recording can be active at a time."
+    )]
     async fn start_recording(
         &self,
         Parameters(params): Parameters<StartRecordingParams>,
@@ -428,7 +468,9 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Stop the active recording, save it to disk, and return a summary. The recording can later be replayed with replay_recording.")]
+    #[tool(
+        description = "Stop the active recording, save it to disk, and return a summary. The recording can later be replayed with replay_recording."
+    )]
     async fn stop_recording(&self) -> String {
         match self.do_stop_recording().await {
             Ok(text) => text,
@@ -436,7 +478,9 @@ impl CortexBrowserServer {
         }
     }
 
-    #[tool(description = "Replay a saved recording deterministically. Each action is re-executed using stored element locators - no LLM needed. Aborts on first element not found.")]
+    #[tool(
+        description = "Replay a saved recording deterministically. Each action is re-executed using stored element locators - no LLM needed. Aborts on first element not found."
+    )]
     async fn replay_recording(
         &self,
         Parameters(params): Parameters<ReplayRecordingParams>,
@@ -468,6 +512,22 @@ impl CortexBrowserServer {
             Err(e) => format!("ERROR: Delete recording failed: {e}"),
         }
     }
+
+    #[tool(
+        description = "Take a PNG screenshot of the current page. Returns a base64-encoded image. Use full_page to capture the entire scrollable page. Use annotate to overlay interactive elements with red borders and @eN labels for visual debugging."
+    )]
+    async fn screenshot(
+        &self,
+        Parameters(params): Parameters<ScreenshotParams>,
+    ) -> Result<CallToolResult, rmcp::ErrorData> {
+        match self.do_screenshot(params).await {
+            Ok(result) => Ok(result),
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                "ERROR: Screenshot failed: {e}"
+            ))])),
+        }
+    }
+
 }
 
 #[tool_handler]
@@ -488,7 +548,8 @@ impl ServerHandler for CortexBrowserServer {
                  Use 'page_diff' to see what changed since the last snapshot, or pass return_diff:true to click/type_text/select_option. \
                  Use 'extract' with a JSON Schema to pull structured data (tables, lists, objects) from the page as JSON. \
                  Use 'start_recording' / 'stop_recording' to capture action sequences, then 'replay_recording' to replay them deterministically without LLM decisions. \
-                 Use 'list_recordings' and 'delete_recording' to manage saved recordings."
+                 Use 'list_recordings' and 'delete_recording' to manage saved recordings. \
+                 Use 'screenshot' to capture a PNG of the current page, with optional full_page and annotate flags for visual debugging."
                     .into(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
@@ -520,11 +581,13 @@ fn parse_viewport_json(json: &str) -> Option<crate::dom::ViewportInfo> {
         #[serde(rename = "documentHeight")]
         document_height: u32,
     }
-    serde_json::from_str::<Raw>(json).ok().map(|r| crate::dom::ViewportInfo {
-        scroll_y: r.scroll_y,
-        viewport_height: r.viewport_height,
-        document_height: r.document_height,
-    })
+    serde_json::from_str::<Raw>(json)
+        .ok()
+        .map(|r| crate::dom::ViewportInfo {
+            scroll_y: r.scroll_y,
+            viewport_height: r.viewport_height,
+            document_height: r.document_height,
+        })
 }
 
 /// Apply task context filtering to a snapshot if a context is set.
@@ -560,6 +623,54 @@ fn build_task_context(
     }
 }
 
+fn build_annotation_js(ref_index: &RefIndex, full_page: bool) -> String {
+    let position = if full_page { "absolute" } else { "fixed" };
+    let scroll_offset = if full_page {
+        "window.scrollX, window.scrollY"
+    } else {
+        "0, 0"
+    };
+
+    let mut entries = String::new();
+    for (ref_id, locator) in ref_index {
+        entries.push_str(&format!(
+            "{{ ref_id: {ref_id}, find: function() {{ return {find}; }} }},\n",
+            find = locator.to_js_expression()
+        ));
+    }
+
+    format!(
+        r#"(function() {{
+    var container = document.createElement('div');
+    container.id = '__cortex_annotations';
+    container.style.cssText = 'pointer-events:none; position:{position}; top:0; left:0; width:0; height:0; z-index:2147483647;';
+    var entries = [{entries}];
+    var offsets = [{scroll_offset}];
+    entries.forEach(function(e) {{
+        var el = e.find();
+        if (!el) return;
+        var r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return;
+        var overlay = document.createElement('div');
+        overlay.style.cssText = 'position:{position}; border:2px solid red; pointer-events:none;'
+            + 'left:' + (r.left + offsets[0]) + 'px;'
+            + 'top:' + (r.top + offsets[1]) + 'px;'
+            + 'width:' + r.width + 'px;'
+            + 'height:' + r.height + 'px;';
+        var label = document.createElement('span');
+        label.textContent = '@e' + e.ref_id;
+        label.style.cssText = 'position:absolute; top:-16px; left:0; background:red; color:white; font:bold 11px monospace; padding:1px 3px; white-space:nowrap;';
+        overlay.appendChild(label);
+        container.appendChild(overlay);
+    }});
+    document.body.appendChild(container);
+}})()"#,
+    )
+}
+
+const REMOVE_ANNOTATIONS_JS: &str =
+    "(function() { var el = document.getElementById('__cortex_annotations'); if (el) el.remove(); })()";
+
 impl CortexBrowserServer {
     async fn ensure_browser(&self) -> anyhow::Result<()> {
         let mut state = self.state.write().await;
@@ -567,7 +678,11 @@ impl CortexBrowserServer {
             return Ok(());
         }
 
-        info!(launch = self.launch_browser, port = self.port, "initializing browser connection");
+        info!(
+            launch = self.launch_browser,
+            port = self.port,
+            "initializing browser connection"
+        );
         let b = if self.launch_browser {
             browser::launch().await?
         } else {
@@ -614,7 +729,9 @@ impl CortexBrowserServer {
         let mut result = pipeline::process_with_refs(&html, &final_url);
         result.snapshot.viewport = viewport;
 
-        let ref_exprs: Vec<(u32, String)> = result.ref_index.iter()
+        let ref_exprs: Vec<(u32, String)> = result
+            .ref_index
+            .iter()
             .map(|(id, loc)| (*id, loc.to_js_expression()))
             .collect();
         if !ref_exprs.is_empty() {
@@ -626,7 +743,8 @@ impl CortexBrowserServer {
                 .and_then(|v| v.into_value::<String>().ok())
                 .unwrap_or_default();
             if let Ok(vis_map) = serde_json::from_str::<HashMap<String, bool>>(&vis_json) {
-                let vis: HashMap<u32, bool> = vis_map.into_iter()
+                let vis: HashMap<u32, bool> = vis_map
+                    .into_iter()
                     .filter_map(|(k, v)| k.parse::<u32>().ok().map(|id| (id, v)))
                     .collect();
                 annotate_viewport(&mut result.snapshot.nodes, &vis);
@@ -643,15 +761,18 @@ impl CortexBrowserServer {
             state.next_tab_id += 1;
             let text = apply_task_context(&None, &result.snapshot);
             info!(tab_id = tab_id, url = %final_url, refs = result.ref_index.len(), "created initial tab");
-            state.tabs.insert(tab_id, TabState {
-                page,
-                ref_index: result.ref_index,
-                current_url: final_url,
-                cached_snapshot: Some(text.clone()),
-                observer_installed: true,
-                task_context: None,
-                previous_snapshot: None,
-            });
+            state.tabs.insert(
+                tab_id,
+                TabState {
+                    page,
+                    ref_index: result.ref_index,
+                    current_url: final_url,
+                    cached_snapshot: Some(text.clone()),
+                    observer_installed: true,
+                    task_context: None,
+                    previous_snapshot: None,
+                },
+            );
             state.active_tab = tab_id;
             Ok(text)
         } else {
@@ -689,11 +810,18 @@ impl CortexBrowserServer {
                     return Ok(cached.clone());
                 }
             }
-            debug!(mutations = dirty_state.mutation_count, "DOM dirty, re-snapshotting");
+            debug!(
+                mutations = dirty_state.mutation_count,
+                "DOM dirty, re-snapshotting"
+            );
         }
 
         let tab = state.active_tab()?;
-        let html = tab.page.content().await.context("Failed to get page content")?;
+        let html = tab
+            .page
+            .content()
+            .await
+            .context("Failed to get page content")?;
         let url = tab
             .page
             .url()
@@ -722,7 +850,9 @@ impl CortexBrowserServer {
         result.snapshot.viewport = viewport;
 
         let tab = state.active_tab()?;
-        let ref_exprs: Vec<(u32, String)> = result.ref_index.iter()
+        let ref_exprs: Vec<(u32, String)> = result
+            .ref_index
+            .iter()
             .map(|(id, loc)| (*id, loc.to_js_expression()))
             .collect();
         if !ref_exprs.is_empty() {
@@ -735,7 +865,8 @@ impl CortexBrowserServer {
                 .and_then(|v| v.into_value::<String>().ok())
                 .unwrap_or_default();
             if let Ok(vis_map) = serde_json::from_str::<HashMap<String, bool>>(&vis_json) {
-                let vis: HashMap<u32, bool> = vis_map.into_iter()
+                let vis: HashMap<u32, bool> = vis_map
+                    .into_iter()
                     .filter_map(|(k, v)| k.parse::<u32>().ok().map(|id| (id, v)))
                     .collect();
                 annotate_viewport(&mut result.snapshot.nodes, &vis);
@@ -775,7 +906,12 @@ impl CortexBrowserServer {
         Ok(result)
     }
 
-    async fn do_type_text(&self, ref_id: u32, text: &str, return_diff: bool) -> anyhow::Result<String> {
+    async fn do_type_text(
+        &self,
+        ref_id: u32,
+        text: &str,
+        return_diff: bool,
+    ) -> anyhow::Result<String> {
         info!(ref_id = ref_id, text = %text, return_diff = return_diff, "type_text");
         let (js, captured_locator) = {
             let state = self.state.read().await;
@@ -798,7 +934,12 @@ impl CortexBrowserServer {
         Ok(result)
     }
 
-    async fn do_select(&self, ref_id: u32, value: &str, return_diff: bool) -> anyhow::Result<String> {
+    async fn do_select(
+        &self,
+        ref_id: u32,
+        value: &str,
+        return_diff: bool,
+    ) -> anyhow::Result<String> {
         info!(ref_id = ref_id, value = %value, return_diff = return_diff, "select_option");
         let (js, captured_locator) = {
             let state = self.state.read().await;
@@ -829,7 +970,10 @@ impl CortexBrowserServer {
     ) -> anyhow::Result<String> {
         let prev_snapshot = if return_diff {
             let state = self.state.read().await;
-            state.active_tab().ok().and_then(|t| t.previous_snapshot.clone())
+            state
+                .active_tab()
+                .ok()
+                .and_then(|t| t.previous_snapshot.clone())
         } else {
             None
         };
@@ -837,7 +981,11 @@ impl CortexBrowserServer {
         let result_value = {
             let state = self.state.read().await;
             let tab = state.active_tab()?;
-            let eval = tab.page.evaluate(js).await.context("Failed to execute action")?;
+            let eval = tab
+                .page
+                .evaluate(js)
+                .await
+                .context("Failed to execute action")?;
             eval.into_value::<String>().unwrap_or_default()
         };
 
@@ -867,8 +1015,7 @@ impl CortexBrowserServer {
 
     async fn do_wait_for_changes(&self, timeout_ms: u64) -> anyhow::Result<String> {
         debug!(timeout_ms = timeout_ms, "waiting for DOM changes");
-        let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
         let poll_interval = std::time::Duration::from_millis(100);
 
         loop {
@@ -905,10 +1052,7 @@ impl CortexBrowserServer {
         self.do_snapshot().await
     }
 
-    async fn do_set_task_context(
-        &self,
-        params: SetTaskContextParams,
-    ) -> anyhow::Result<String> {
+    async fn do_set_task_context(&self, params: SetTaskContextParams) -> anyhow::Result<String> {
         let mut msg = format!("Task context set: \"{}\"", params.task);
         if !params.focus_text.is_empty() {
             msg.push_str(&format!("\nFocus text: {}", params.focus_text.join(", ")));
@@ -936,10 +1080,7 @@ impl CortexBrowserServer {
         Ok(msg)
     }
 
-    async fn do_focused_snapshot(
-        &self,
-        params: FocusedSnapshotParams,
-    ) -> anyhow::Result<String> {
+    async fn do_focused_snapshot(&self, params: FocusedSnapshotParams) -> anyhow::Result<String> {
         let ctx = build_task_context(
             String::new(),
             params.focus_text,
@@ -950,7 +1091,11 @@ impl CortexBrowserServer {
         let mut state = self.state.write().await;
         let tab = state.active_tab()?;
 
-        let html = tab.page.content().await.context("Failed to get page content")?;
+        let html = tab
+            .page
+            .content()
+            .await
+            .context("Failed to get page content")?;
         let url = tab
             .page
             .url()
@@ -1000,15 +1145,18 @@ impl CortexBrowserServer {
         let tab_id = state.next_tab_id;
         state.next_tab_id += 1;
 
-        state.tabs.insert(tab_id, TabState {
-            page,
-            ref_index: result.ref_index,
-            current_url: final_url,
-            cached_snapshot: Some(text.clone()),
-            observer_installed: true,
-            task_context: None,
-            previous_snapshot: None,
-        });
+        state.tabs.insert(
+            tab_id,
+            TabState {
+                page,
+                ref_index: result.ref_index,
+                current_url: final_url,
+                cached_snapshot: Some(text.clone()),
+                observer_installed: true,
+                task_context: None,
+                previous_snapshot: None,
+            },
+        );
         state.active_tab = tab_id;
 
         info!(tab_id = tab_id, "tab opened");
@@ -1027,7 +1175,11 @@ impl CortexBrowserServer {
 
         for id in tab_ids {
             let tab = &state.tabs[&id];
-            let active = if id == state.active_tab { " [active]" } else { "" };
+            let active = if id == state.active_tab {
+                " [active]"
+            } else {
+                ""
+            };
             lines.push(format!("Tab {id}{active}: [{}]", tab.current_url));
         }
 
@@ -1058,12 +1210,7 @@ impl CortexBrowserServer {
         tab.page.close().await.ok();
 
         if state.active_tab == tab_id {
-            state.active_tab = state
-                .tabs
-                .keys()
-                .copied()
-                .min()
-                .unwrap_or(0);
+            state.active_tab = state.tabs.keys().copied().min().unwrap_or(0);
         }
 
         if state.tabs.is_empty() {
@@ -1119,7 +1266,11 @@ impl CortexBrowserServer {
         let state = self.state.read().await;
         let tab = state.active_tab()?;
 
-        let html = tab.page.content().await.context("Failed to get page content")?;
+        let html = tab
+            .page
+            .content()
+            .await
+            .context("Failed to get page content")?;
         let url = tab
             .page
             .url()
@@ -1130,19 +1281,13 @@ impl CortexBrowserServer {
 
         let snapshot = pipeline::process(&html, &url);
 
-        let result = extract::extract_with_schema(
-            &snapshot,
-            &params.schema,
-            params.selector.as_deref(),
-        );
+        let result =
+            extract::extract_with_schema(&snapshot, &params.schema, params.selector.as_deref());
 
         Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|_| "null".into()))
     }
 
-    async fn do_start_recording(
-        &self,
-        params: StartRecordingParams,
-    ) -> anyhow::Result<String> {
+    async fn do_start_recording(&self, params: StartRecordingParams) -> anyhow::Result<String> {
         let mut state = self.state.write().await;
         if state.active_recording.is_some() {
             anyhow::bail!("A recording is already in progress. Stop it first.");
@@ -1194,10 +1339,7 @@ impl CortexBrowserServer {
         ))
     }
 
-    async fn do_replay_recording(
-        &self,
-        params: ReplayRecordingParams,
-    ) -> anyhow::Result<String> {
+    async fn do_replay_recording(&self, params: ReplayRecordingParams) -> anyhow::Result<String> {
         let rec = self.store.load(&params.name, params.domain.as_deref())?;
         info!(name = %rec.name, actions = rec.actions.len(), "replaying recording");
 
@@ -1256,30 +1398,30 @@ impl CortexBrowserServer {
     }
 
     /// Execute a JS step during replay, checking for NOT_FOUND.
-    async fn execute_replay_step(
-        &self,
-        js: &str,
-        step_num: usize,
-    ) -> anyhow::Result<()> {
+    async fn execute_replay_step(&self, js: &str, step_num: usize) -> anyhow::Result<()> {
         let result_value = {
             let state = self.state.read().await;
             let tab = state.active_tab()?;
-            let eval = tab.page.evaluate(js).await.context("Failed to execute replay action")?;
+            let eval = tab
+                .page
+                .evaluate(js)
+                .await
+                .context("Failed to execute replay action")?;
             eval.into_value::<String>().unwrap_or_default()
         };
 
         if result_value == "NOT_FOUND" {
-            anyhow::bail!("Replay step {}: element not found in the live DOM", step_num);
+            anyhow::bail!(
+                "Replay step {}: element not found in the live DOM",
+                step_num
+            );
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         Ok(())
     }
 
-    async fn do_list_recordings(
-        &self,
-        params: ListRecordingsParams,
-    ) -> anyhow::Result<String> {
+    async fn do_list_recordings(&self, params: ListRecordingsParams) -> anyhow::Result<String> {
         let summaries = self.store.list(params.domain.as_deref())?;
         if summaries.is_empty() {
             return Ok("No recordings found.".into());
@@ -1303,10 +1445,7 @@ impl CortexBrowserServer {
         Ok(format!("Recordings:\n{}", lines.join("\n")))
     }
 
-    async fn do_delete_recording(
-        &self,
-        params: DeleteRecordingParams,
-    ) -> anyhow::Result<String> {
+    async fn do_delete_recording(&self, params: DeleteRecordingParams) -> anyhow::Result<String> {
         self.store.delete(&params.name, params.domain.as_deref())?;
         Ok(format!("Recording '{}' deleted.", params.name))
     }
@@ -1329,7 +1468,11 @@ impl CortexBrowserServer {
         let result_value = {
             let state = self.state.read().await;
             let tab = state.active_tab()?;
-            let eval = tab.page.evaluate(js.as_str()).await.context("Failed to scroll")?;
+            let eval = tab
+                .page
+                .evaluate(js.as_str())
+                .await
+                .context("Failed to scroll")?;
             eval.into_value::<String>().unwrap_or_default()
         };
 
@@ -1345,10 +1488,58 @@ impl CortexBrowserServer {
         }
         self.do_snapshot().await
     }
+
+    async fn do_screenshot(&self, params: ScreenshotParams) -> anyhow::Result<CallToolResult> {
+        let full_page = params.full_page.unwrap_or(false);
+        let annotate = params.annotate.unwrap_or(false);
+        info!(full_page = full_page, annotate = annotate, "screenshot");
+
+        self.ensure_browser().await?;
+
+        let state = self.state.read().await;
+        let tab = state.active_tab()?;
+
+        if annotate {
+            let annotation_js = build_annotation_js(&tab.ref_index, full_page);
+            tab.page.evaluate(annotation_js).await.ok();
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+
+        let screenshot_params = chromiumoxide::page::ScreenshotParams::builder()
+            .full_page(full_page)
+            .build();
+
+        let bytes = tab
+            .page
+            .screenshot(screenshot_params)
+            .await
+            .context("Failed to capture screenshot")?;
+
+        if annotate {
+            tab.page.evaluate(REMOVE_ANNOTATIONS_JS).await.ok();
+        }
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let size_kb = bytes.len() / 1024;
+        let meta = format!(
+            "Screenshot captured ({size_kb} KB, {})",
+            if full_page { "full page" } else { "viewport" }
+        );
+
+        Ok(CallToolResult::success(vec![
+            Content::text(meta),
+            Content::image(encoded, "image/png"),
+        ]))
+    }
+
 }
 
 pub async fn run_mcp_server(launch: bool, port: u16) -> anyhow::Result<()> {
-    info!(launch = launch, port = port, "starting MCP server over stdio");
+    info!(
+        launch = launch,
+        port = port,
+        "starting MCP server over stdio"
+    );
     let server = CortexBrowserServer::new(launch, port);
 
     let service = server
@@ -1369,8 +1560,7 @@ pub async fn run_mcp_http_server(
     http_port: u16,
 ) -> anyhow::Result<()> {
     use rmcp::transport::streamable_http_server::{
-        StreamableHttpServerConfig, StreamableHttpService,
-        session::local::LocalSessionManager,
+        session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
     };
     use tokio_util::sync::CancellationToken;
 
