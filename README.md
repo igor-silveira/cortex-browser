@@ -50,6 +50,12 @@ Interactive elements get `@eN` refs. The agent clicks by ref (`click @e61466`), 
 - **MCP server**: Runs as a Model Context Protocol server over stdio or HTTP for agent integration.
 - **Incremental re-snapshots**: DOM mutation observer skips re-processing when nothing changed.
 
+## Download
+
+Pre-built binaries for macOS, Linux, and Windows are available on the [Releases](https://github.com/igor-silveira/cortex-browser/releases) page.
+
+Download the latest release for your platform and add it to your `PATH`.
+
 ## Getting Started
 
 ### Prerequisites
